@@ -100,7 +100,33 @@ router.get('/posts', authMiddleware, async (req, res) => {
 });
 
 router.post('/posts', authMiddleware, upload.single('image'), async (req, res) => {
-  const displayName = req.body?.username || req.user?.username || req.body?.user?.username || 'MiitVerse member';
+  let postUserId = req.user.id;
+  let displayName = req.body?.username || req.user?.username || req.body?.user?.username || 'MiitVerse member';
+
+  // Admin accounts must not publish posts under their own identity. They may
+  // only publish through a page dashboard, where the post belongs to the page.
+  if (req.user.role === 'admin') {
+    const behalfPageId = req.body?.onBehalfOfPageId;
+    if (!behalfPageId) {
+      return res.status(403).json({ message: 'Admin accounts cannot publish posts. Publish from a page dashboard instead.' });
+    }
+
+    try {
+      const pages = await listPageRecords();
+      const page = (pages || []).find(
+        (item) => String(item?.id) === String(behalfPageId) || String(item?.ownerId) === String(behalfPageId)
+      );
+      if (!page) {
+        return res.status(403).json({ message: 'You can only publish on behalf of an existing page.' });
+      }
+      postUserId = page.id;
+      displayName = page.pageName || displayName;
+    } catch (error) {
+      console.error('Failed to resolve page record for admin post:', error.message);
+      return res.status(500).json({ message: 'Failed to resolve page for publishing' });
+    }
+  }
+
   const content = req.body?.content || req.body?.message || '';
   const imageUrl = typeof req.body?.image === 'string' && req.body.image.trim()
     ? req.body.image
@@ -124,7 +150,7 @@ router.post('/posts', authMiddleware, upload.single('image'), async (req, res) =
     ...req.body,
     content,
     image: resolvedImageUrl,
-    userId: req.user.id,
+    userId: postUserId,
     username: displayName,
     suspended: false,
   });
