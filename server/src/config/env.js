@@ -78,8 +78,10 @@ export const env = {
   mongodbPassword: normalizeEnvValue(process.env.MONGODB_PASSWORD),
   mongodbDatabase: normalizeEnvValue(process.env.MONGODB_DATABASE || 'test'),
   mongodbProtocol: normalizeEnvValue(process.env.MONGODB_PROTOCOL || 'mongodb+srv'),
-  neo4jUri: process.env.NEO4J_URI || 'neo4j+s://1bdef416.databases.neo4j.io',
-  neo4jUser: process.env.NEO4J_USER || '1bdef416',
-  neo4jPassword: process.env.NEO4J_PASSWORD || 'FncPa8gGXHqc9gfCFIKnyxrOlyFJ1qamH82NyQf7zbc',
+  neo4jUri: normalizeEnvValue(process.env.NEO4J_URI),
+  neo4jUser: normalizeEnvValue(process.env.NEO4J_USER),
+  neo4jPassword: normalizeEnvValue(process.env.NEO4J_PASSWORD),
   skipDb: (process.env.SKIP_DB || 'false').toLowerCase() === 'true',
 }
+
+export const hasNeo4jConfig = Boolean(env.neo4jUri && env.neo4jUser && env.neo4jPassword)
