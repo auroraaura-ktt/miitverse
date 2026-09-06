@@ -59,14 +59,30 @@ function sendVerificationEmailInBackground(email, code, pendingRegistration) {
     })
 }
 
-function buildInvitationLink(email) {
-  const cleanOrigin = env.clientOrigin.replace(/\/+$/g, '')
-  const encodedEmail = encodeURIComponent(email)
+function getCanonicalClientOrigin() {
+  const rawOrigin = (env.clientOrigin || 'https://miitverse-xi.vercel.app').trim()
+  const cleanedOrigin = rawOrigin.replace(/\/+$/g, '')
+
+  if (!cleanedOrigin) {
+    return 'https://miitverse-xi.vercel.app'
+  }
+
+  if (/^https?:\/\//i.test(cleanedOrigin)) {
+    return cleanedOrigin
+  }
+
+  return `https://${cleanedOrigin}`
+}
+
+export function buildInvitationLink(email) {
+  const cleanOrigin = getCanonicalClientOrigin().replace(/\/+$/g, '')
+  const encodedEmail = encodeURIComponent(String(email ?? '').trim())
   return `${cleanOrigin}/register?email=${encodedEmail}`
 }
 
 async function sendInvitationEmail(toEmail) {
   const invitationLink = buildInvitationLink(toEmail)
+  const assetOrigin = getCanonicalClientOrigin()
   const html = `
     <div style="margin:0; padding:0; background:#eef1f8;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#eef1f8;">
@@ -80,7 +96,7 @@ async function sendInvitationEmail(toEmail) {
                   <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
                     <tr>
                       <td style="width:62px; height:62px; background:#ffffff; border-radius:50%; text-align:center; vertical-align:middle;">
-                        <img src="https://miitverse-xi.vercel.app/miitLogo.png" alt="MIIT" width="46" height="46" style="display:block; margin:8px auto; width:46px; height:46px; border-radius:50%;" />
+                        <img src="${assetOrigin}/miitLogo.png" alt="MIIT" width="46" height="46" style="display:block; margin:8px auto; width:46px; height:46px; border-radius:50%;" />
                       </td>
                     </tr>
                   </table>
@@ -128,7 +144,7 @@ async function sendInvitationEmail(toEmail) {
               <tr>
                 <td style="padding:18px 40px; background:#f6f8fc; border-top:1px solid #e9eef7; font-family:Arial, Helvetica, sans-serif; text-align:center;">
                   <p style="margin:0; font-size:11px; line-height:1.7; color:#a5aec0;">
-                    <span style="color:#1450b8; font-weight:bold;">Miit</span><span style="color:#c79a00; font-weight:bold;">Verse</span> &bull; miitverse-xi.vercel.app<br />
+                    <span style="color:#1450b8; font-weight:bold;">Miit</span><span style="color:#c79a00; font-weight:bold;">Verse</span> &bull; ${assetOrigin.replace(/^https?:\/\//i, '')}<br />
                     If you weren't expecting this invitation, you can safely ignore this email.
                   </p>
                 </td>

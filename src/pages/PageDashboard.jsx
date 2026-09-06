@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { FaArrowLeft, FaBullhorn, FaChartLine, FaImage, FaPen } from 'react-icons/fa'
 
 import { useAuth } from '../context/useAuth'
@@ -8,6 +8,7 @@ import { buildPagePost, normalizePagePosts } from '../lib/pagePosts'
 import './PageDashboard.css'
 
 export default function PageDashboard() {
+  const navigate = useNavigate()
   const { slug } = useParams()
   const { token, user } = useAuth()
   const [page, setPage] = useState(null)
@@ -214,7 +215,20 @@ export default function PageDashboard() {
           <button type="button" className={activeTab === 'published-posts' ? 'active' : ''} onClick={() => setActiveTab('published-posts')}><FaBullhorn /> Published posts</button>
         </nav>
 
-        <Link className="page-back-link" to="/feed"><FaArrowLeft /> Back to feed</Link>
+        <button
+          type="button"
+          className="page-back-link"
+          onClick={() => {
+            if (window.history.length > 1) {
+              navigate(-1)
+              return
+            }
+
+            navigate('/feed')
+          }}
+        >
+          <FaArrowLeft /> Back
+        </button>
       </aside>
 
       <section className="page-dashboard-main">

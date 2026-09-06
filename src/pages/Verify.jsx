@@ -51,6 +51,15 @@ export default function Verify() {
   const location = useLocation()
   const storedPending = useMemo(() => readPendingVerification(), [])
   const stateEmail = location.state?.email || ''
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+
+    navigate('/register')
+  }
   const initialEmail = stateEmail || storedPending?.email || ''
   const initialResendAvailableAt = location.state?.resendAvailableAt || storedPending?.resendAvailableAt
   const initialVerificationExpiresAt = location.state?.verificationExpiresAt || storedPending?.verificationExpiresAt
@@ -240,6 +249,9 @@ export default function Verify() {
 
       <div className="form-section">
         <div className="auth-container">
+          <button type="button" className="auth-back-btn" onClick={handleBack}>
+            ← Back
+          </button>
           <h2>Verify email</h2>
           <p style={{ textAlign: 'center', color: '#8892b0', marginBottom: '24px' }}>
             Enter the 8-digit code sent to your email.

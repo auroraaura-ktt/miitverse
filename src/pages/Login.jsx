@@ -14,6 +14,15 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+
+    navigate('/')
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     setError('')
@@ -95,6 +104,9 @@ export default function Login() {
 
       <div className="form-section">
         <div className="auth-container">
+          <button type="button" className="auth-back-btn" onClick={handleBack}>
+            ← Back
+          </button>
           <h2>Login</h2>
           <p style={{ textAlign: 'center', color: '#8892b0', marginBottom: '24px' }}>
             Use your account to access MiitVerse.

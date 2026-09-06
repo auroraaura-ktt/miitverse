@@ -211,10 +211,17 @@ export default function Profile() {
         <header className="mv-profile-topbar">
           <button
             className="mv-back-button"
-            onClick={() => navigate('/feed')}
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1)
+                return
+              }
+
+              navigate('/feed')
+            }}
           >
             <FaArrowLeft />
-            <span>Back to Feed</span>
+            <span>Back</span>
           </button>
 
           <div className="mv-profile-brand">

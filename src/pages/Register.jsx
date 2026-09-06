@@ -12,6 +12,15 @@ export default function Register() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [emailValidationMessage, setEmailValidationMessage] = useState('')
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+
+    navigate('/')
+  }
   const [passwordValidation, setPasswordValidation] = useState({
     isLengthValid: false,
     hasUpperCase: false,
@@ -110,6 +119,9 @@ export default function Register() {
 
       <div className="form-section">
         <div className="auth-container" style={{ maxWidth: '480px' }}>
+          <button type="button" className="auth-back-btn" onClick={handleBack}>
+            ← Back
+          </button>
           <h2>Create account</h2>
           <p style={{ textAlign: 'center', color: '#8892b0', marginBottom: '24px' }}>
             Join MiitVerse as a user account.
