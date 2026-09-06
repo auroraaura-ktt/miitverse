@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../context/useAuth'
 import { apiRequest } from '../lib/api'
+import LoadingState from '../components/LoadingState'
 import './Admin.css'
 
 export default function Admin() {
@@ -46,12 +47,8 @@ export default function Admin() {
   const [postsList, setPostsList] = useState([])
   const [loadingPosts, setLoadingPosts] = useState(false)
   const [postsFilter, setPostsFilter] = useState('all') // all | user | page | suspended
-  const [reportRows, setReportRows] = useState([
-    { id: 'r-101', reporter: 'Jane Doe', type: 'Inappropriate Post', status: 'Open', target: 'Campus Event Reminder', author: 'MIIT Student Club' },
-    { id: 'r-102', reporter: 'Alex Kim', type: 'Spam', status: 'Investigating', target: 'Free giveaway link', author: 'Random Account' },
-    { id: 'r-103', reporter: 'May Win', type: 'Harassment', status: 'Open', target: 'Offensive comment thread', author: 'User A12' },
-    { id: 'r-104', reporter: 'Leo Tan', type: 'Misinformation', status: 'Resolved', target: 'Fake exam timetable', author: 'Page Admin' },
-  ])
+  const [reportRows, setReportRows] = useState([])
+  const [loadingReports, setLoadingReports] = useState(false)
   const [expandedReportId, setExpandedReportId] = useState(null)
 
   const [inviteEmails, setInviteEmails] = useState('')
@@ -119,6 +116,48 @@ export default function Admin() {
       setLoadingPages(false)
     }
   }, [token])
+
+  const loadReports = useCallback(async () => {
+    setLoadingReports(true)
+    try {
+      const data = await apiRequest('/social/reports', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setReportRows(data.reports || [])
+    } catch (err) {
+      setError(err.message || 'Failed to load reports')
+      setReportRows([])
+    } finally {
+      setLoadingReports(false)
+    }
+  }, [token])
+
+  const handleReportStatusChange = async (reportId, status) => {
+    try {
+      const data = await apiRequest(`/social/reports/${encodeURIComponent(reportId)}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status }),
+      })
+      setReportRows((currentRows) => currentRows.map((item) => item.id === reportId ? data.report : item))
+      setExpandedReportId(null)
+    } catch (err) {
+      setError(err.message || 'Failed to update report')
+    }
+  }
+
+  const handleDeleteReport = async (reportId) => {
+    try {
+      await apiRequest(`/social/reports/${encodeURIComponent(reportId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setReportRows((currentRows) => currentRows.filter((item) => item.id !== reportId))
+      setExpandedReportId(null)
+    } catch (err) {
+      setError(err.message || 'Failed to delete report')
+    }
+  }
 
   const handleFormChange = (e) => {
     const { name, value } = e.target
@@ -579,12 +618,16 @@ export default function Admin() {
     if (activeSection === 'posts') {
       loadAllPosts()
     }
+    if (activeSection === 'reports') {
+      loadReports()
+    }
     if (activeSection === 'dashboard') {
       loadUsers()
       loadPages({ reportError: false })
       loadAllPosts()
+      loadReports()
     }
-  }, [activeSection, loadUsers, loadPages, loadInviteHistory])
+  }, [activeSection, loadUsers, loadPages, loadInviteHistory, loadReports])
 
   const sidebarItems = [
     { key: 'dashboard', label: '📊 Dashboard' },
@@ -622,6 +665,17 @@ export default function Admin() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const dashboardMetrics = [
+    { label: 'Users', value: users.length, color: 'blue' },
+    { label: 'Pages', value: pages.length, color: 'gold' },
+    { label: 'Posts', value: postsList.length, color: 'green' },
+    { label: 'Reports', value: reportRows.length, color: 'red' },
+  ]
+  const dashboardChartMax = Math.max(...dashboardMetrics.map((metric) => metric.value), 1)
+  const dashboardChartPoints = dashboardMetrics
+    .map((metric, index) => `${34 + index * 84},${128 - (metric.value / dashboardChartMax) * 92}`)
+    .join(' ')
+
   const renderContent = () => {
     switch (activeSection) {
       case 'users':
@@ -653,7 +707,7 @@ export default function Admin() {
 
               {usersTab === 'regular' && (
                 <>
-                  {loadingUsers && <p>Loading users...</p>}
+                  {loadingUsers && <LoadingState label="Loading users" compact />}
                   {error && <p className="error-text">{error}</p>}
 
                   {!loadingUsers && regularUsers.length === 0 && !error && (
@@ -786,10 +840,10 @@ export default function Admin() {
                 <p>Actions take effect immediately. Use suspension to block sign-in without removing account data.</p>
                 <button type="button" className="admin-reset-btn" onClick={() => setResetPasswordUserId(selectedUser.id)}>Reset password</button>
                 {selectedUser.role !== 'admin' && (
-                  <button type="button" className={`admin-verified-btn ${selectedUser.verified ? 'enabled' : ''}`} disabled={updatingVerified} onClick={handleToggleVerified}>{updatingVerified ? 'Updating…' : selectedUser.verified ? 'Disable Blue Mark' : 'Enable Blue Mark'}</button>
+                  <button type="button" className={`admin-verified-btn ${selectedUser.verified ? 'enabled' : ''}`} disabled={updatingVerified} onClick={handleToggleVerified}>{updatingVerified && <span className="button-spinner" aria-hidden="true" />}{updatingVerified ? 'Updating…' : selectedUser.verified ? 'Disable Blue Mark' : 'Enable Blue Mark'}</button>
                 )}
                 {selectedUser.role === 'admin' && <small>Admin accounts cannot receive a blue mark.</small>}
-                <button type="button" className="admin-suspend-btn" disabled={isCurrentAdmin || updatingUserStatus} onClick={requestUserSuspension}>{updatingUserStatus ? 'Updating…' : selectedUser.suspended ? 'Restore account' : 'Suspend account'}</button>
+                <button type="button" className="admin-suspend-btn" disabled={isCurrentAdmin || updatingUserStatus} onClick={requestUserSuspension}>{updatingUserStatus && <span className="button-spinner" aria-hidden="true" />}{updatingUserStatus ? 'Updating…' : selectedUser.suspended ? 'Restore account' : 'Suspend account'}</button>
                 <button type="button" className="admin-delete-btn" disabled={isCurrentAdmin} onClick={requestUserDeletion}>Delete account</button>
                 {isCurrentAdmin && <small>You cannot suspend or delete your own admin account.</small>}
               </section>
@@ -850,6 +904,7 @@ export default function Admin() {
                   disabled={updatingPageVerified === selectedPage.id}
                   onClick={() => handleTogglePageVerified(selectedPage)}
                 >
+                  {updatingPageVerified === selectedPage.id && <span className="button-spinner" aria-hidden="true" />}
                   {updatingPageVerified === selectedPage.id ? 'Updating…' : selectedPage.verified === false ? 'Enable Blue Mark' : 'Disable Blue Mark'}
                 </button>
                 <button type="button" className="admin-reset-btn" onClick={() => setResetPasswordUserId(selectedPage.ownerId || selectedPage.id)}>Reset password</button>
@@ -915,13 +970,14 @@ export default function Admin() {
               </div>
 
               <button type="submit" className="form-submit" disabled={creatingPageAccount} onClick={handleCreatePageAccount}>
+                {creatingPageAccount && <span className="button-spinner" aria-hidden="true" />}
                 {creatingPageAccount ? 'Creating account...' : 'Create Page Account'}
               </button>
             </div>
 
             <div className="admin-users-table-wrap" style={{ marginTop: '24px' }}>
               <h3 style={{ marginBottom: '12px' }}>Created Pages</h3>
-              {loadingPages && <p>Loading pages...</p>}
+              {loadingPages && <LoadingState label="Loading pages" compact />}
               {!loadingPages && pages.length === 0 && <p>No pages created yet.</p>}
               {!loadingPages && pages.length > 0 && (
                 <div className="admin-page-list">
@@ -969,7 +1025,7 @@ export default function Admin() {
               <span>Admin accounts cannot publish posts. To publish, open a page account's dashboard from the Page Accounts section — posts are published under the page's full name.</span>
             </div>
 
-            {loadingPosts && <p>Loading posts...</p>}
+            {loadingPosts && <LoadingState label="Loading posts" compact />}
 
             {!loadingPosts && postsList.length === 0 && (
               <p>No posts found.</p>
@@ -1042,6 +1098,7 @@ export default function Admin() {
               </div>
 
               <button type="submit" className="form-submit" disabled={inviting}>
+                {inviting && <span className="button-spinner" aria-hidden="true" />}
                 {inviting ? 'Sending invitations...' : 'Send invitations'}
               </button>
             </form>
@@ -1075,7 +1132,7 @@ export default function Admin() {
                 <button type="button" className="admin-users-refresh" onClick={() => loadInviteHistory()}>↻ Refresh</button>
               </div>
 
-              {loadingInviteHistory && <p>Loading invitation history...</p>}
+              {loadingInviteHistory && <LoadingState label="Loading invitation history" compact />}
               {inviteHistoryError && <p className="error-text">{inviteHistoryError}</p>}
 
               {!loadingInviteHistory && !inviteHistoryError && inviteHistory.length === 0 && (
@@ -1130,6 +1187,9 @@ export default function Admin() {
             </div>
 
             <div className="admin-users-table-wrap admin-report-table-wrap">
+              {loadingReports && <LoadingState label="Loading reports" compact />}
+              {!loadingReports && reportRows.length === 0 && <p>No user reports have been submitted.</p>}
+              {!loadingReports && reportRows.length > 0 && (
               <table className="admin-users-table admin-reports-table">
                 <thead>
                   <tr>
@@ -1169,16 +1229,10 @@ export default function Admin() {
                           {expandedReportId === report.id && (
                             <div className="admin-report-action-menu">
                               <button type="button" onClick={() => window.alert(`Previewing report: ${report.target}`)}>Preview</button>
-                              <button type="button" onClick={() => {
-                                setReportRows((currentRows) => currentRows.map((item) => item.id === report.id ? { ...item, status: 'Resolved' } : item));
-                                setExpandedReportId(null);
-                              }}>
+                              <button type="button" onClick={() => handleReportStatusChange(report.id, 'Resolved')}>
                                 Resolve
                               </button>
-                              <button type="button" className="admin-delete-btn" onClick={() => {
-                                setReportRows((currentRows) => currentRows.filter((item) => item.id !== report.id));
-                                setExpandedReportId(null);
-                              }}>
+                              <button type="button" className="admin-delete-btn" onClick={() => handleDeleteReport(report.id)}>
                                 Delete
                               </button>
                             </div>
@@ -1189,6 +1243,7 @@ export default function Admin() {
                   ))}
                 </tbody>
               </table>
+              )}
             </div>
           </section>
         )
@@ -1227,6 +1282,53 @@ export default function Admin() {
               <button type="button" onClick={() => goToSection('posts')}>📝 Posts</button>
               <button type="button" onClick={() => goToSection('invitations')}>✉ Send Invitations</button>
               <button type="button" onClick={() => goToSection('reports')}>🚩 Reports</button>
+            </section>
+
+            <section className="admin-insights" aria-label="Dashboard summary">
+              <div className="admin-insights-heading">
+                <div>
+                  <p className="admin-eyebrow">AT A GLANCE</p>
+                  <h2>Community overview</h2>
+                  <p>Key activity counts across the platform, updated with this dashboard.</p>
+                </div>
+                <div className="admin-insights-total">
+                  <strong>{users.length + pages.length + postsList.length}</strong>
+                  <span>managed items</span>
+                </div>
+              </div>
+
+              <div className="admin-summary-strip">
+                <div><span>Needs attention</span><strong>{reportRows.filter((report) => report.status !== 'Resolved').length} reports</strong></div>
+                <div><span>Published content</span><strong>{postsList.length} posts</strong></div>
+                <div><span>Verified pages</span><strong>{pages.filter((page) => page.verified).length} pages</strong></div>
+              </div>
+
+              <div className="admin-chart-grid">
+                <div className="admin-chart-card">
+                  <div className="admin-chart-heading"><div><h3>Content mix</h3><p>Current records by category</p></div><span>COUNT</span></div>
+                  <div className="admin-histogram" role="img" aria-label="Histogram comparing users, pages, posts, and reports">
+                    {dashboardMetrics.map((metric) => (
+                      <div className="admin-bar-column" key={metric.label}>
+                        <strong>{metric.value}</strong>
+                        <div className="admin-bar-track"><span className={`admin-bar ${metric.color}`} style={{ height: `${Math.max(8, (metric.value / dashboardChartMax) * 100)}%` }} /></div>
+                        <small>{metric.label}</small>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="admin-chart-card">
+                  <div className="admin-chart-heading"><div><h3>Activity signal</h3><p>Relative volume across tracked areas</p></div><span>LIVE DATA</span></div>
+                  <div className="admin-line-chart" role="img" aria-label="Line graph showing relative dashboard activity">
+                    <div className="admin-chart-grid-lines"><span /><span /><span /><span /></div>
+                    <svg viewBox="0 0 300 150" preserveAspectRatio="none" aria-hidden="true">
+                      <polyline points={dashboardChartPoints} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                      {dashboardMetrics.map((metric, index) => <circle key={metric.label} cx={34 + index * 84} cy={128 - (metric.value / dashboardChartMax) * 92} r="5" />)}
+                    </svg>
+                    <div className="admin-line-labels">{dashboardMetrics.map((metric) => <small key={metric.label}>{metric.label}</small>)}</div>
+                  </div>
+                </div>
+              </div>
             </section>
 
             <section className="dashboard-grid">
@@ -1281,11 +1383,31 @@ export default function Admin() {
                 </button>
               </li>
             ))}
+            <li className="admin-sidebar-logout">
+              <button type="button" className="admin-nav-item" onClick={logout}>↪ Log out</button>
+            </li>
           </ul>
         </nav>
       </aside>
 
       <main className="admin-main">
+        <nav className="admin-mobile-nav" aria-label="Admin sections">
+          <span className="admin-mobile-nav-label">Admin menu</span>
+          <div className="admin-mobile-nav-list">
+            {sidebarItems.map((item) => (
+              <button
+                type="button"
+                key={item.key}
+                className={`admin-mobile-nav-item ${activeSection === item.key ? 'active' : ''}`}
+                onClick={() => goToSection(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+            <button type="button" className="admin-mobile-nav-item admin-mobile-logout" onClick={logout}>↪ Log out</button>
+          </div>
+        </nav>
+
         <div className="admin-header">
           <div>
             <h1>Dashboard Overview</h1>
@@ -1296,12 +1418,6 @@ export default function Admin() {
             <img src="https://i.pravatar.cc/150?img=8" alt="admin" />
             <span>{user?.username || user?.email}</span>
           </div>
-        </div>
-
-        <div className="admin-actions">
-          <button className="admin-logout" type="button" onClick={logout}>
-            Log out
-          </button>
         </div>
 
         <div className="admin-page-shell">
@@ -1351,6 +1467,7 @@ export default function Admin() {
                     className="form-submit"
                     disabled={resettingPassword}
                   >
+                    {resettingPassword && <span className="button-spinner" aria-hidden="true" />}
                     {resettingPassword ? 'Resetting...' : 'Reset Password'}
                   </button>
                   <button

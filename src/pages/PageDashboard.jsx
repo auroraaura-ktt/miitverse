@@ -5,6 +5,7 @@ import { FaArrowLeft, FaBullhorn, FaChartLine, FaImage, FaPen } from 'react-icon
 import { useAuth } from '../context/useAuth'
 import { apiRequest } from '../lib/api'
 import { buildPagePost, normalizePagePosts } from '../lib/pagePosts'
+import LoadingState from '../components/LoadingState'
 import './PageDashboard.css'
 
 export default function PageDashboard() {
@@ -145,7 +146,7 @@ export default function PageDashboard() {
               <label className="page-image-picker" htmlFor="pageImage"><FaImage /> Add image</label>
               <input id="pageImage" type="file" accept="image/*" onChange={handleImageChange} />
               <span>{draft.trim().length} characters</span>
-              <button type="submit" disabled={posting}>{posting ? 'Publishing…' : <><FaBullhorn /> Publish update</>}</button>
+              <button type="submit" disabled={posting}>{posting ? <><span className="button-spinner" aria-hidden="true" /> Publishing…</> : <><FaBullhorn /> Publish update</>}</button>
             </div>
             {imageError && <p className="page-message error">{imageError}</p>}
             {message && <p className={`page-message ${message === 'Your page update is live.' ? 'success' : 'error'}`}>{message}</p>}
@@ -184,7 +185,7 @@ export default function PageDashboard() {
   }
 
   if (loading) {
-    return <main className="page-dashboard-state">Loading your page dashboard…</main>
+    return <main className="page-dashboard-state"><LoadingState label="Loading your page dashboard" /></main>
   }
 
   if (error || !page) {

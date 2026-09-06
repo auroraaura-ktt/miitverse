@@ -47,6 +47,8 @@ export default function PostCard({ post = {}, onPostUpdated }) {
     likers: initialLikers,
   });
   const [liking, setLiking] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [reported, setReported] = useState(false);
 
   const [showReactionModal, setShowReactionModal] = useState(false);
 
@@ -91,9 +93,21 @@ export default function PostCard({ post = {}, onPostUpdated }) {
     }));
   };
 
-  const handleReport = () => {
-    if (typeof window !== "undefined") {
+  const handleReport = async () => {
+    if (reporting || reported || !user?.id) return;
+
+    setReporting(true);
+    try {
+      await apiRequest(`/social/posts/${encodeURIComponent(id)}/reports`, {
+        method: "POST",
+        body: JSON.stringify({ type: "Inappropriate content" }),
+      });
+      setReported(true);
       window.alert("This post has been reported and will be reviewed by the moderation team.");
+    } catch (error) {
+      window.alert(error.message || "We could not submit the report. Please try again.");
+    } finally {
+      setReporting(false);
     }
   };
 
@@ -307,6 +321,8 @@ export default function PostCard({ post = {}, onPostUpdated }) {
           <button
             className="post-action-btn"
             onClick={handleReport}
+            disabled={reporting || reported || !user?.id}
+            title={!user?.id ? "Sign in to report this post" : reported ? "Post reported" : "Report this post"}
             style={{
               flex: 1,
               display: "flex",
@@ -318,12 +334,13 @@ export default function PostCard({ post = {}, onPostUpdated }) {
               cursor: "pointer",
               padding: "8px",
               fontSize: "16px",
-              color: "#0B1E4F",
+              color: reported ? "#b42318" : "#0B1E4F",
               transition: "all 0.2s ease",
             }}
           >
             <span style={{ fontSize: "18px" }}>🚩</span>
-            <span>Report</span>
+            {reporting && <span className="button-spinner" aria-hidden="true" />}
+            <span>{reporting ? "Sending…" : reported ? "Reported" : "Report"}</span>
           </button>
 
         </div>

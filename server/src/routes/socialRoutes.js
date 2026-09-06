@@ -19,6 +19,7 @@ import {
 } from '../utils/socialStore.js';
 import { listPageRecords } from '../utils/pagePersistence.js';
 import { persistSocialPost } from '../utils/socialPersistence.js';
+import { createReport, deleteReportById, listReports, updateReportById } from '../utils/reportStore.js';
 
 const router = Router();
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -178,6 +179,49 @@ router.post('/posts/:id/likes', authMiddleware, (req, res) => {
 
   res.json(result)
 })
+
+router.post('/posts/:id/reports', authMiddleware, (req, res) => {
+  const post = listAllSocialPosts().find((item) => String(item?.id) === String(req.params.id));
+  if (!post) return res.status(404).json({ message: 'Post not found' });
+
+  const { type, details } = req.body || {};
+  const result = createReport({
+    postId: post.id,
+    reporterId: req.user.id,
+    reporter: req.user.username || req.user.email,
+    type,
+    details,
+    target: post.content?.slice(0, 120) || 'Reported post',
+    author: post.pageName || post.username || post.author || 'Unknown author',
+  });
+
+  if (result.duplicate) {
+    return res.status(409).json({ message: 'You have already reported this post.', report: result.report });
+  }
+
+  return res.status(201).json({ report: result.report });
+});
+
+router.get('/reports', authMiddleware, requireRole('admin'), (req, res) => {
+  res.json({ reports: listReports() });
+});
+
+router.patch('/reports/:id', authMiddleware, requireRole('admin'), (req, res) => {
+  const status = req.body?.status;
+  if (!['Open', 'Investigating', 'Resolved'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid report status' });
+  }
+
+  const report = updateReportById(req.params.id, { status });
+  if (!report) return res.status(404).json({ message: 'Report not found' });
+  return res.json({ report });
+});
+
+router.delete('/reports/:id', authMiddleware, requireRole('admin'), (req, res) => {
+  const deleted = deleteReportById(req.params.id);
+  if (!deleted) return res.status(404).json({ message: 'Report not found' });
+  return res.json({ message: 'Report deleted' });
+});
 
 // Admin: list all posts
 router.get('/posts/all', authMiddleware, requireRole('admin'), (req, res) => {

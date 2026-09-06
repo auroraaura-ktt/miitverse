@@ -203,6 +203,7 @@ export default function Register() {
             {error && <p style={{ color: '#ff6b6b', fontSize: '14px', marginBottom: '16px', textAlign: 'center' }}>{error}</p>}
 
             <button type="submit" className="auth-btn" disabled={loading || !passwordValidation.isValid}>
+              {loading && <span className="button-spinner" aria-hidden="true" />}
               {loading ? 'Creating account...' : 'Register'}
             </button>
           </form>

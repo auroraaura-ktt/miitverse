@@ -318,6 +318,7 @@ export default function Profile() {
                   onClick={handleAvatarUpload}
                   disabled={!selectedAvatar || avatarUploading}
                 >
+                  {avatarUploading && <span className="button-spinner" aria-hidden="true" />}
                   {avatarUploading
                     ? 'Uploading...'
                     : 'Save Profile Photo'}

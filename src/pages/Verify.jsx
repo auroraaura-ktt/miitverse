@@ -297,6 +297,7 @@ export default function Verify() {
             {info && <p style={{ color: '#64ffda', fontSize: '14px', marginBottom: '16px', textAlign: 'center' }}>{info}</p>}
 
             <button type="submit" className="auth-btn" disabled={loading || !isCodeComplete}>
+              {loading && <span className="button-spinner" aria-hidden="true" />}
               {loading ? 'Verifying...' : 'Verify & Create Account'}
             </button>
           </form>
@@ -313,6 +314,7 @@ export default function Verify() {
               className="auth-btn"
               style={{ marginTop: '16px', background: 'rgba(100, 255, 218, 0.2)', color: '#64ffda', border: '1px solid #64ffda' }}
             >
+              {resendLoading && <span className="button-spinner" aria-hidden="true" />}
               {resendLoading ? 'Resending...' : 'Resend verification email'}
             </button>
           )}

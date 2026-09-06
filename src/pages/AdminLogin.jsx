@@ -97,6 +97,7 @@ export default function AdminLogin() {
             {error && <p style={{ color: '#ff6b6b', fontSize: '14px', marginBottom: '16px' }}>{error}</p>}
 
             <button type="submit" className="auth-btn" disabled={loading}>
+              {loading && <span className="button-spinner" aria-hidden="true" />}
               {loading ? 'Signing in...' : 'Enter Admin'}
             </button>
           </form>
