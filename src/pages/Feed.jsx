@@ -6,33 +6,8 @@ import RightSidebar from "../components/RightSidebar"
 import TopBar from "../components/TopBar"
 import CreatePost from "../components/CreatePost"
 import PostList from "../components/PostList"
-import { getVisiblePosts, shouldPersistSocialPost, toggleFollowRelationship } from "../lib/socialFeed"
+import { getVisiblePosts, isPagePost, shouldPersistSocialPost, toggleFollowRelationship } from "../lib/socialFeed"
 import { apiRequest } from "../lib/api"
-
-async function uploadPostImage(file) {
-  if (!file) return null
-
-  const formData = new FormData()
-  formData.append('image', file)
-
-  const authToken = typeof window !== 'undefined' ? window.localStorage.getItem('miitverse-auth') : null
-  const parsedAuth = authToken ? JSON.parse(authToken) : null
-  const token = parsedAuth?.token
-
-  const response = await fetch('/api/social/uploads', {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: formData,
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-    throw new Error(errorData?.message || 'Image upload failed')
-  }
-
-  const data = await response.json()
-  return data.imageUrl || null
-}
 
 export default function Feed() {
   const { user, ready } = useAuth()
@@ -41,16 +16,32 @@ export default function Feed() {
   const [posts, setPosts] = useState([])
   const [following, setFollowing] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [refreshSeed, setRefreshSeed] = useState(0)
-  const lastFetchedPostsRef = useRef([])
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMorePosts, setHasMorePosts] = useState(true)
+  const [feedError, setFeedError] = useState("")
+  const [activeFeed, setActiveFeed] = useState("current")
+  const followingRef = useRef([])
+  const loadMoreRef = useRef(null)
+  const cursorRef = useRef(null)
+  const hasMoreRef = useRef(true)
+  const loadingMoreRef = useRef(false)
+  const feedRequestRef = useRef(false)
 
   const FEED_POST_LIMIT = 8
 
-  const loadFeedData = useCallback(async ({ scrollToTop = false } = {}) => {
-    setIsLoading(true)
+  const loadFeedData = useCallback(async ({ scrollToTop = false, reset = true, refresh = false } = {}) => {
+    if (feedRequestRef.current) return
+    if (!reset && !hasMoreRef.current) return
+
+    feedRequestRef.current = true
+    if (reset) setIsLoading(true)
+    else setIsLoadingMore(true)
+    setFeedError("")
 
     if (scrollToTop) {
-      setRefreshSeed((seed) => seed + 1)
+      cursorRef.current = null
+      hasMoreRef.current = true
+      setHasMorePosts(true)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       const feedCenter = document.querySelector('.feed-center')
       if (feedCenter) feedCenter.scrollTo({ top: 0, behavior: 'smooth' })
@@ -58,8 +49,10 @@ export default function Feed() {
 
     try {
       const savedFollowing = localStorage.getItem("feed-following")
-      if (savedFollowing) {
-        setFollowing(JSON.parse(savedFollowing))
+      if (savedFollowing && reset) {
+        const storedFollowing = JSON.parse(savedFollowing)
+        followingRef.current = storedFollowing
+        setFollowing(storedFollowing)
       }
 
       if (!ready) {
@@ -67,7 +60,7 @@ export default function Feed() {
       }
 
       if (!user?.id) {
-        setPosts([
+        setPosts((currentPosts) => reset ? [
           {
             id: "welcome-post",
             userId: "system",
@@ -81,31 +74,59 @@ export default function Feed() {
             reposts: 0,
             visibility: "public",
           },
-        ])
+        ] : currentPosts)
+        hasMoreRef.current = false
+        setHasMorePosts(false)
         return
       }
 
-      const [{ posts: serverPosts }, { following: serverFollowing }] = await Promise.all([
-        apiRequest('/social/posts'),
-        apiRequest('/social/follows'),
+      loadingMoreRef.current = !reset
+      const postsPath = new URLSearchParams({ limit: String(FEED_POST_LIMIT) })
+      const requestedCursor = reset || refresh ? null : cursorRef.current
+      if (requestedCursor) postsPath.set('cursor', requestedCursor)
+      const [{ posts: serverPosts, hasMore, nextCursor: returnedCursor }, { following: serverFollowing }] = await Promise.all([
+        apiRequest(`/social/posts?${postsPath.toString()}`),
+        reset ? apiRequest('/social/follows') : Promise.resolve({ following: followingRef.current }),
       ])
 
-      setPosts(serverPosts || [])
-      setFollowing(serverFollowing || [])
-      localStorage.setItem("feed-following", JSON.stringify(serverFollowing || []))
-      lastFetchedPostsRef.current = serverPosts || []
+      const incomingPosts = Array.isArray(serverPosts) ? serverPosts : []
+      setPosts((currentPosts) => {
+        const merged = reset || refresh ? [...incomingPosts, ...currentPosts] : [...currentPosts, ...incomingPosts]
+        const unique = new Map(merged.filter(Boolean).map((post) => [String(post.id), post]))
+        return [...unique.values()]
+      })
+      if (reset) {
+        followingRef.current = serverFollowing || []
+        setFollowing(serverFollowing || [])
+        localStorage.setItem("feed-following", JSON.stringify(serverFollowing || []))
+      }
+      if (!refresh) {
+        cursorRef.current = returnedCursor || null
+        hasMoreRef.current = Boolean(hasMore)
+        setHasMorePosts(Boolean(hasMore))
+      }
     } catch (error) {
       console.error("Failed to load feed posts:", error)
+      setFeedError(reset ? "We couldn't load your feed." : "We couldn't load more posts.")
     } finally {
-      setIsLoading(false)
+      if (reset) setIsLoading(false)
+      feedRequestRef.current = false
+      loadingMoreRef.current = false
+      setIsLoadingMore(false)
     }
   }, [ready, user?.id])
 
   useEffect(() => {
-    loadFeedData()
+    const startLoad = () => {
+      window.setTimeout(() => {
+        loadFeedData({ reset: true })
+      }, 0)
+    }
+
+    startLoad()
 
     const refreshTimer = window.setInterval(() => {
-      loadFeedData()
+      loadFeedData({ reset: false, refresh: true })
     }, 15000)
 
     return () => window.clearInterval(refreshTimer)
@@ -210,24 +231,45 @@ export default function Feed() {
       })
 
       setFollowing(nextFollowing || [])
+      followingRef.current = nextFollowing || []
       localStorage.setItem("feed-following", JSON.stringify(nextFollowing || []))
     } catch (error) {
       console.error('Failed to update follow state:', error)
     }
   }
 
-  const visiblePosts = useMemo(() => {
-    const allVisible = getVisiblePosts(posts, user?.id ?? null, following)
+  const visiblePosts = useMemo(
+    () => getVisiblePosts(posts, user?.id ?? null, following),
+    [posts, user?.id, following]
+  )
 
-    // Keep exactly 8 posts on the feed; rotate the selection on each refresh
-    if (allVisible.length > FEED_POST_LIMIT) {
-      const seed = refreshSeed % allVisible.length
-      const rotated = [...allVisible.slice(seed), ...allVisible.slice(0, seed)]
-      return rotated.slice(0, FEED_POST_LIMIT)
-    }
+  // Split the already-retrieved, already-sorted feed posts into the two tabs.
+  // This reuses the existing feed data and algorithm; it only decides which
+  // existing posts are shown in each feed based on the account type.
+  const userPosts = useMemo(
+    () => visiblePosts.filter((post) => !isPagePost(post)),
+    [visiblePosts]
+  )
+  const pagePosts = useMemo(
+    () => visiblePosts.filter((post) => isPagePost(post)),
+    [visiblePosts]
+  )
 
-    return allVisible
-  }, [posts, user?.id, following, refreshSeed])
+  const feedPosts = activeFeed === 'page' ? pagePosts : userPosts
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current
+    if (!sentinel) return undefined
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && hasMoreRef.current && !loadingMoreRef.current) {
+        setIsLoadingMore(true)
+        loadFeedData({ reset: false })
+      }
+    }, { rootMargin: "700px 0px" })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadFeedData, visiblePosts.length])
 
   return (
     <div className={`feed-layout ${darkMode ? "dark" : ""}`}>
@@ -244,12 +286,44 @@ export default function Feed() {
           </div>
         </section>
 
+        <nav className="feed-nav" role="tablist" aria-label="Feed type">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFeed === 'current'}
+            className={`feed-tab ${activeFeed === 'current' ? 'active' : ''}`}
+            onClick={() => setActiveFeed('current')}
+          >
+            Current
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFeed === 'page'}
+            className={`feed-tab ${activeFeed === 'page' ? 'active' : ''}`}
+            onClick={() => setActiveFeed('page')}
+          >
+            Page
+          </button>
+
+          <span
+            className={`feed-indicator ${activeFeed === 'page' ? 'page-active' : ''}`}
+            aria-hidden="true"
+          />
+        </nav>
+
         <CreatePost onAddPost={handleAddPost} onRefresh={loadFeedData} isRefreshing={isLoading} />
         <PostList
-          posts={visiblePosts}
+          posts={feedPosts}
           isLoading={isLoading}
           onPostUpdated={handlePostUpdated}
         />
+        {feedError && <div className="feed-load-error" role="alert">{feedError}<button type="button" onClick={() => loadFeedData({ reset: !feedError.includes("more") })}>Retry</button></div>}
+        <div ref={loadMoreRef} className="feed-load-status" aria-live="polite">
+          {isLoadingMore && <span className="feed-loader" aria-label="Loading more posts" />}
+          {!isLoading && !isLoadingMore && !hasMorePosts && feedPosts.length > 0 && <span>You've reached the end of your feed.</span>}
+        </div>
       </main>
 
       <RightSidebar

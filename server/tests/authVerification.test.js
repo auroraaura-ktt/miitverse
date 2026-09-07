@@ -10,10 +10,10 @@ test('normalizeVerificationCode strips spaces and non-digits before validating a
   assert.equal(normalizeVerificationCode('12345678'), '12345678')
 })
 
-test('buildInvitationLink uses the canonical MiitVerse Vercel origin and encodes the email safely', () => {
+test('buildInvitationLink uses the canonical MiitVerse origin and encodes the email safely', () => {
   assert.equal(
     buildInvitationLink('student@miit.edu.mm'),
-    'https://miitverse-xi.vercel.app/register?email=student%40miit.edu.mm'
+    'https://miitverse.onrender.com/register?email=student%40miit.edu.mm'
   )
 })
 

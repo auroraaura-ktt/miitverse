@@ -75,30 +75,20 @@ export function shuffleUserPostsByReactions(posts = [], random = Math.random) {
     .map((entry) => entry.post);
 }
 
-function sortPagePostsByLatest(posts = []) {
+function sortPostsByLatest(posts = []) {
   return [...(posts || [])].sort((left, right) => {
-    return new Date(right.createdAt || 0) - new Date(left.createdAt || 0);
+    const rightTime = Date.parse(right.createdAt || '');
+    const leftTime = Date.parse(left.createdAt || '');
+    if (Number.isNaN(rightTime) && Number.isNaN(leftTime)) return 0;
+    if (Number.isNaN(rightTime)) return 1;
+    if (Number.isNaN(leftTime)) return -1;
+    if (rightTime !== leftTime) return rightTime - leftTime;
+    return String(right.id || '').localeCompare(String(left.id || ''));
   });
 }
 
 export function applyUserPostWeightedShuffle(posts = [], options = {}) {
-  const pagePostUserIds = options.pagePostUserIds || options.pageUserIds || [];
-  const random = options.random || Math.random;
-  const pagePosts = [];
-  const userPosts = [];
-
-  for (const post of posts || []) {
-    if (isPagePost(post, pagePostUserIds)) pagePosts.push(post);
-    else userPosts.push(post);
-  }
-
-  const shuffledUserPosts = shuffleUserPostsByReactions(userPosts, random);
-  const orderedPagePosts = sortPagePostsByLatest(pagePosts).map((post) => ({
-    ...post,
-    source: post.source || 'page',
-  }));
-
-  return [...orderedPagePosts, ...shuffledUserPosts];
+  return sortPostsByLatest(posts);
 }
 
 export function toggleFollowRelationship(currentFollowing = [], targetUser = null) {
@@ -121,6 +111,27 @@ export function listSocialPosts(currentUserId = null, following = [], options = 
   return applyUserPostWeightedShuffle(getVisiblePosts(posts, currentUserId, following), options);
 }
 
+export function listSocialPostsPage(currentUserId = null, following = [], options = {}) {
+  const limit = Math.min(50, Math.max(1, Number(options.limit) || 8));
+  const cursor = options.cursor || null;
+  const visiblePosts = applyUserPostWeightedShuffle(getVisiblePosts(readJson(postsFile, []), currentUserId, following));
+  const startIndex = cursor
+    ? visiblePosts.findIndex((post) => String(post.id) === String(cursor.id)) + 1
+    : 0;
+  const safeStartIndex = startIndex > 0 ? startIndex : 0;
+  const posts = visiblePosts.slice(safeStartIndex, safeStartIndex + limit);
+  const hasMore = safeStartIndex + posts.length < visiblePosts.length;
+  const lastPost = posts.at(-1);
+
+  return {
+    posts,
+    hasMore,
+    nextCursor: hasMore && lastPost
+      ? { id: lastPost.id, createdAt: lastPost.createdAt }
+      : null,
+  };
+}
+
 export function listAllSocialPosts() {
   return readJson(postsFile, []);
 }
@@ -128,7 +139,7 @@ export function listAllSocialPosts() {
 export function listSocialPostsByUserId(userId) {
   if (!userId) return [];
   const posts = readJson(postsFile, []);
-  return sortPagePostsByLatest(
+  return sortPostsByLatest(
     (posts || []).filter((p) => p && (p.userId === userId || p.userId === String(userId)))
   );
 }
@@ -212,6 +223,33 @@ export function toggleSocialPostLike(postId, account) {
   if (!result) return null
   writeJson(postsFile, updated)
   return result
+}
+
+export function addSocialPostComment(postId, comment) {
+  if (!postId || !comment?.userId || !String(comment.content || '').trim()) return null
+
+  const posts = readJson(postsFile, [])
+  let updatedPost = null
+  const updated = posts.map((post) => {
+    if (!post || String(post.id) !== String(postId)) return post
+
+    const nextComment = {
+      id: comment.id || `comment-${Date.now()}`,
+      userId: String(comment.userId),
+      username: comment.username || 'MiitVerse member',
+      content: String(comment.content).trim().slice(0, 500),
+      createdAt: comment.createdAt || new Date().toISOString(),
+    }
+    updatedPost = {
+      ...post,
+      comments: [...(Array.isArray(post.comments) ? post.comments : []), nextComment],
+    }
+    return updatedPost
+  })
+
+  if (!updatedPost) return null
+  writeJson(postsFile, updated)
+  return { post: updatedPost, comment: updatedPost.comments.at(-1) }
 }
 
 export function getSocialFollows(userId) {

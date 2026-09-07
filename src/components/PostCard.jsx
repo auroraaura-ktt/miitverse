@@ -40,12 +40,14 @@ export default function PostCard({ post = {}, onPostUpdated }) {
 
   const initialLikers = Array.isArray(likedBy) ? likedBy : [];
   const [reactions, setReactions] = useState({
+    postId: id,
     likes: Number(likes || 0),
     comments: initialCommentCount,
     shares: Number(reposts || 0),
     liked: initialLikers.some((entry) => String(entry?.userId) === String(user?.id)),
     likers: initialLikers,
   });
+  const [postComments, setPostComments] = useState(Array.isArray(comments) ? comments : []);
   const [liking, setLiking] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [reported, setReported] = useState(false);
@@ -62,7 +64,8 @@ export default function PostCard({ post = {}, onPostUpdated }) {
       liked: nextLikers.some((entry) => String(entry?.userId) === String(user?.id)),
       likers: nextLikers,
     }));
-  }, [id, likes, initialCommentCount, reposts, user?.id, likedBy]);
+    setPostComments(Array.isArray(comments) ? comments : []);
+  }, [id, likes, initialCommentCount, reposts, user?.id, likedBy, comments]);
 
   const handleLike = async () => {
     if (liking || !user?.id) return;
@@ -87,10 +90,14 @@ export default function PostCard({ post = {}, onPostUpdated }) {
   };
 
   const handleComment = () => {
-    setReactions((prev) => ({
-      ...prev,
-      comments: prev.comments + 1,
-    }));
+    setShowReactionModal(true);
+  };
+
+  const handleCommentAdded = (nextPost) => {
+    const nextComments = Array.isArray(nextPost?.comments) ? nextPost.comments : [];
+    setPostComments(nextComments);
+    setReactions((current) => ({ ...current, comments: nextComments.length }));
+    onPostUpdated?.(nextPost);
   };
 
   const handleReport = async () => {
@@ -134,6 +141,8 @@ export default function PostCard({ post = {}, onPostUpdated }) {
         post={post}
         reactions={reactions}
         likers={reactions.likers}
+        comments={postComments}
+        onCommentAdded={handleCommentAdded}
       />
 
       <div className="post-card">
@@ -346,43 +355,17 @@ export default function PostCard({ post = {}, onPostUpdated }) {
         </div>
 
         <div className="post-engagement" style={{ padding: "12px 16px" }}>
-          <div
-            className="post-card-engagement-count"
-            style={{
-              fontWeight: "600",
-              marginBottom: "8px",
-              fontSize: "14px",
-              cursor: "pointer",
-              color: "#F5B62D",
-            }}
-            onClick={handleReactionCountClick}
-          >
-            {reactions.liked ? "You and " : ""}{reactions.likes - (reactions.liked ? 1 : 0)} {reactions.likes - (reactions.liked ? 1 : 0) === 1 ? "other person" : "others"} liked this
-          </div>
-
           <p
             className="post-card-body"
             style={{
               lineHeight: "1.5",
               fontSize: "14px",
-              marginBottom: "8px",
+              marginBottom: "0",
             }}
           >
             <strong>{displayName}</strong> {verified && <VerifiedBadge size="small" />} {content.substring(0, 80)}
             {content.length > 80 ? "..." : ""}
           </p>
-
-          <div
-            className="post-card-comments-link"
-            style={{
-              fontSize: "12px",
-              cursor: "pointer",
-              fontWeight: "600",
-            }}
-            onClick={handleReactionCountClick}
-          >
-            View all {reactions.comments} comments
-          </div>
         </div>
       </div>
     </>

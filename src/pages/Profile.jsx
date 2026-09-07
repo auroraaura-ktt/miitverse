@@ -53,7 +53,7 @@ export default function Profile() {
 
   const fileInputRef = useRef(null)
 
-  const [username, setUsername] = useState(user?.username ?? '')
+  const [username, setUsername] = useState(() => user?.username ?? '')
 
   const [usernameStatus, setUsernameStatus] = useState('')
   const [usernameError, setUsernameError] = useState('')
@@ -65,16 +65,11 @@ export default function Profile() {
   const [passwordStatus, setPasswordStatus] = useState('')
   const [passwordError, setPasswordError] = useState('')
 
-  const [avatarPreview, setAvatarPreview] = useState(user?.avatarUrl || '')
+  const [avatarPreview, setAvatarPreview] = useState(() => user?.avatarUrl || '')
   const [selectedAvatar, setSelectedAvatar] = useState(null)
   const [avatarStatus, setAvatarStatus] = useState('')
   const [avatarError, setAvatarError] = useState('')
   const [avatarUploading, setAvatarUploading] = useState(false)
-
-  useEffect(() => {
-    setUsername(user?.username ?? '')
-    setAvatarPreview(user?.avatarUrl || '')
-  }, [user?.username, user?.avatarUrl])
 
   const initials = useMemo(
     () => getInitials(user?.username),

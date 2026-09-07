@@ -60,11 +60,11 @@ function sendVerificationEmailInBackground(email, code, pendingRegistration) {
 }
 
 function getCanonicalClientOrigin() {
-  const rawOrigin = (env.clientOrigin || 'https://miitverse-xi.vercel.app').trim()
+  const rawOrigin = (env.clientOrigin || 'https://miitverse.onrender.com').trim()
   const cleanedOrigin = rawOrigin.replace(/\/+$/g, '')
 
   if (!cleanedOrigin) {
-    return 'https://miitverse-xi.vercel.app'
+    return 'https://miitverse.onrender.com'
   }
 
   if (/^https?:\/\//i.test(cleanedOrigin)) {
@@ -721,14 +721,13 @@ export async function loginUser(req, res) {
     return res.status(400).json({ message: 'email or username and password are required' })
   }
 
-  let user = null
-  let passwordMatches = false
+  let foundUser = null
   let session = null
 
   try {
-    user = await lookupUserInMongoSafely(identifier)
+    foundUser = await lookupUserInMongoSafely(identifier)
 
-    if (!user) {
+    if (!foundUser) {
       session = driver.session()
 
       try {
@@ -746,22 +745,22 @@ export async function loginUser(req, res) {
         )
 
         if (result.records.length > 0) {
-          user = getUserProperties(result.records[0].get('user'))
+          foundUser = getUserProperties(result.records[0].get('user'))
         }
       } catch (error) {
         console.warn('Neo4j login lookup failed, falling back to MongoDB:', error.message)
       }
     }
 
-    if (!user) {
+    if (!foundUser) {
       return res.status(401).json({ message: 'Invalid credentials' })
     }
 
-    if (user.suspended) {
+    if (foundUser.suspended) {
       return res.status(403).json({ message: 'This account has been suspended. Please contact an administrator.' })
     }
 
-    passwordMatches = await bcrypt.compare(password, user.passwordHash)
+    const passwordMatches = await bcrypt.compare(password, foundUser.passwordHash)
 
     if (!passwordMatches) {
       return res.status(401).json({ message: 'Invalid credentials' })
@@ -769,16 +768,16 @@ export async function loginUser(req, res) {
 
     const token = jwt.sign(
       {
-        id: user.id,
-        role: user.role,
-        username: user.username,
-        email: user.email,
+        id: foundUser.id,
+        role: foundUser.role,
+        username: foundUser.username,
+        email: foundUser.email,
       },
       env.jwtSecret,
       { expiresIn: '7d' }
     )
 
-    const responseUser = await buildLoginResponseUser(user)
+    const responseUser = await buildLoginResponseUser(foundUser)
 
     return res.json({
       message: 'Login successful',

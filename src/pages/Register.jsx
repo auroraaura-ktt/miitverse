@@ -8,7 +8,8 @@ export default function Register() {
   const navigate = useNavigate()
   const location = useLocation()
   const { register } = useAuth()
-  const [form, setForm] = useState({ username: '', email: '', password: '' })
+  const initialEmailFromQuery = new URLSearchParams(location.search).get('email') ?? ''
+  const [form, setForm] = useState({ username: '', email: initialEmailFromQuery, password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [emailValidationMessage, setEmailValidationMessage] = useState('')
@@ -34,7 +35,7 @@ export default function Register() {
     const hasUpperCase = /[A-Z]/.test(pwd)
     const hasLowerCase = /[a-z]/.test(pwd)
     const hasNumber = /[0-9]/.test(pwd)
-    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd)
+    const hasSpecialChar = /[^A-Za-z0-9]/.test(pwd)
     const isLengthValid = pwd.length >= 8
     return {
       hasUpperCase,
@@ -57,14 +58,6 @@ export default function Register() {
       ? ''
       : 'Only @miit.edu.mm email addresses are allowed for registration.'
   }
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    const inviteEmail = params.get('email')
-    if (inviteEmail) {
-      setForm((prev) => ({ ...prev, email: inviteEmail }))
-    }
-  }, [location.search])
 
   async function handleSubmit(event) {
     event.preventDefault()

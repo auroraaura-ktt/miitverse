@@ -6,9 +6,29 @@
     "content": "ffgefghethet",
     "image": null,
     "createdAt": "2026-08-31T12:38:32.381Z",
-    "likes": 0,
-    "likedBy": [],
-    "comments": [],
+    "likes": 1,
+    "likedBy": [
+      {
+        "userId": "54eba06c-8b30-42fa-9a8a-7481bd04cf78",
+        "username": "Shine Wunna Tun"
+      }
+    ],
+    "comments": [
+      {
+        "id": "comment-1788771742590",
+        "userId": "54eba06c-8b30-42fa-9a8a-7481bd04cf78",
+        "username": "Shine Wunna Tun",
+        "content": "I love U",
+        "createdAt": "2026-09-07T09:02:22.590Z"
+      },
+      {
+        "id": "comment-1788771786439",
+        "userId": "54eba06c-8b30-42fa-9a8a-7481bd04cf78",
+        "username": "Shine Wunna Tun",
+        "content": "Ko KO",
+        "createdAt": "2026-09-07T09:03:06.439Z"
+      }
+    ],
     "reposts": 0,
     "visibility": "public"
   },
@@ -47,7 +67,15 @@
     "createdAt": "2026-08-31T12:30:25.904Z",
     "likes": 0,
     "likedBy": [],
-    "comments": [],
+    "comments": [
+      {
+        "id": "comment-1788786538876",
+        "userId": "54eba06c-8b30-42fa-9a8a-7481bd04cf78",
+        "username": "Shine Wunna Tun",
+        "content": "Hi",
+        "createdAt": "2026-09-07T13:08:58.876Z"
+      }
+    ],
     "reposts": 0,
     "visibility": "public"
   },
@@ -58,9 +86,22 @@
     "content": "Test again",
     "image": null,
     "createdAt": "2026-08-31T10:10:39.901Z",
-    "likes": 0,
-    "likedBy": [],
-    "comments": [],
+    "likes": 1,
+    "likedBy": [
+      {
+        "userId": "54eba06c-8b30-42fa-9a8a-7481bd04cf78",
+        "username": "Shine Wunna Tun"
+      }
+    ],
+    "comments": [
+      {
+        "id": "comment-1788771905053",
+        "userId": "54eba06c-8b30-42fa-9a8a-7481bd04cf78",
+        "username": "Shine Wunna Tun",
+        "content": "Nga ko Thi lr",
+        "createdAt": "2026-09-07T09:05:05.053Z"
+      }
+    ],
     "reposts": 0,
     "visibility": "public"
   },
@@ -71,8 +112,13 @@
     "content": "Test",
     "image": null,
     "createdAt": "2026-08-31T09:59:23.718Z",
-    "likes": 0,
-    "likedBy": [],
+    "likes": 1,
+    "likedBy": [
+      {
+        "userId": "54eba06c-8b30-42fa-9a8a-7481bd04cf78",
+        "username": "Shine Wunna Tun"
+      }
+    ],
     "comments": [],
     "reposts": 0,
     "visibility": "public"
@@ -151,7 +197,15 @@
     "createdAt": "2026-08-19T13:17:01.577Z",
     "likes": 0,
     "likedBy": [],
-    "comments": [],
+    "comments": [
+      {
+        "id": "comment-1788794090165",
+        "userId": "ed27eac5-56d7-4b4e-afda-500d56442514",
+        "username": "Kyaw Thein Tun",
+        "content": "hello",
+        "createdAt": "2026-09-07T15:14:50.165Z"
+      }
+    ],
     "reposts": 0,
     "visibility": "public"
   },

@@ -10,12 +10,14 @@ import {
   createSocialPost,
   getSocialFollows,
   listSocialPosts,
+  listSocialPostsPage,
   saveSocialFollows,
   listAllSocialPosts,
   deleteSocialPostById,
   updateSocialPostById,
   listSocialPostsByUserId,
   toggleSocialPostLike,
+  addSocialPostComment,
 } from '../utils/socialStore.js';
 import { listPageRecords } from '../utils/pagePersistence.js';
 import { persistSocialPost } from '../utils/socialPersistence.js';
@@ -58,7 +60,16 @@ router.get('/uploads/:fileName', (req, res) => {
 });
 
 router.get('/posts', authMiddleware, async (req, res) => {
-  const { userId } = req.query || {}
+  const { userId, cursor: rawCursor } = req.query || {}
+  const limit = Math.min(50, Math.max(1, Number(req.query?.limit) || 8))
+  let cursor = null
+  if (rawCursor) {
+    try {
+      cursor = JSON.parse(Buffer.from(String(rawCursor), 'base64url').toString('utf8'))
+    } catch {
+      return res.status(400).json({ message: 'Invalid feed cursor' })
+    }
+  }
   if (userId) {
     const posts = listSocialPostsByUserId(userId)
     return res.json({ posts })
@@ -88,7 +99,8 @@ router.get('/posts', authMiddleware, async (req, res) => {
     console.error('Failed to load page records for feed ordering:', error.message)
   }
 
-  const posts = (listSocialPosts(req.user.id, following, { pagePostUserIds }) || []).map((post) => {
+  const pageResult = listSocialPostsPage(req.user.id, following, { pagePostUserIds, limit, cursor })
+  const posts = (pageResult.posts || []).map((post) => {
     if (!post) return post
     const pageName = pageFullNames.get(String(post.userId))
     // Page account posts show their full page name on the feed.
@@ -97,7 +109,10 @@ router.get('/posts', authMiddleware, async (req, res) => {
     }
     return post
   });
-  res.json({ posts });
+  const nextCursor = pageResult.nextCursor
+    ? Buffer.from(JSON.stringify(pageResult.nextCursor)).toString('base64url')
+    : null
+  res.json({ posts, hasMore: pageResult.hasMore, nextCursor });
 });
 
 router.post('/posts', authMiddleware, upload.single('image'), async (req, res) => {
@@ -178,6 +193,26 @@ router.post('/posts/:id/likes', authMiddleware, (req, res) => {
   }
 
   res.json(result)
+})
+
+router.post('/posts/:id/comments', authMiddleware, async (req, res) => {
+  const content = String(req.body?.content || '').trim()
+  if (!content) return res.status(400).json({ message: 'Comment cannot be empty' })
+  if (content.length > 500) return res.status(400).json({ message: 'Comment must be 500 characters or fewer' })
+
+  const result = addSocialPostComment(req.params.id, {
+    userId: req.user.id,
+    username: req.user.username,
+    content,
+  })
+  if (!result) return res.status(404).json({ message: 'Post not found' })
+
+  try {
+    await persistSocialPost(result.post)
+  } catch (error) {
+    console.error('Comment persistence failed:', error.message)
+  }
+  return res.status(201).json(result)
 })
 
 router.post('/posts/:id/reports', authMiddleware, (req, res) => {
