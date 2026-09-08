@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { persistSocialPost } from '../src/utils/socialPersistence.js'
+import { listSocialPostsFromMongo, persistSocialPost } from '../src/utils/socialPersistence.js'
 
 const post = {
   id: 'post-test-1',
@@ -30,4 +30,37 @@ test('post persistence rejects when Neo4j cannot save', async () => {
     }),
     /Neo4j unavailable/
   )
+})
+
+test('social feed lookup can read posts from MongoDB when the database is available', async () => {
+  const originalFind = globalThis.__mongoFindMock || null
+  const collection = [{
+    id: 'mongo-post-123',
+    userId: 'user-1',
+    username: 'Mongo User',
+    content: 'Stored in MongoDB',
+    image: null,
+    createdAt: '2026-08-20T11:00:00.000Z',
+    likes: 5,
+    likedBy: [],
+    comments: [],
+    reposts: 0,
+    visibility: 'public',
+    suspended: false,
+  }]
+
+  globalThis.__mongoFindMock = async () => collection
+
+  try {
+    const result = await listSocialPostsFromMongo()
+    assert.equal(result.length, 1)
+    assert.equal(result[0].id, 'mongo-post-123')
+    assert.equal(result[0].username, 'Mongo User')
+  } finally {
+    if (originalFind === null) {
+      delete globalThis.__mongoFindMock
+    } else {
+      globalThis.__mongoFindMock = originalFind
+    }
+  }
 })

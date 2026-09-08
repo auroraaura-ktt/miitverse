@@ -18,9 +18,11 @@ import {
   listSocialPostsByUserId,
   toggleSocialPostLike,
   addSocialPostComment,
+  getVisiblePosts,
+  applyUserPostWeightedShuffle,
 } from '../utils/socialStore.js';
 import { listPageRecords } from '../utils/pagePersistence.js';
-import { persistSocialPost } from '../utils/socialPersistence.js';
+import { listSocialPostsFromMongo, persistSocialPost } from '../utils/socialPersistence.js';
 import { listVerifiedUserIds } from '../utils/userPersistence.js';
 import { createReport, deleteReportById, listReports, updateReportById } from '../utils/reportStore.js';
 
@@ -98,6 +100,7 @@ router.get('/posts', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Invalid feed cursor' })
     }
   }
+
   if (userId) {
     let verifiedAuthorIds = new Set()
     try {
@@ -106,10 +109,14 @@ router.get('/posts', authMiddleware, async (req, res) => {
       console.warn('Failed to resolve verified accounts for user posts:', error.message)
     }
 
-    const posts = (listSocialPostsByUserId(userId) || []).map((post) => (
+    const posts = (await listSocialPostsFromMongo({ userId: String(userId), suspended: { $ne: true } }))
+      .map((post) => (
+        post ? { ...post, isVerified: verifiedAuthorIds.has(String(post.userId)) } : post
+      ))
+
+    return res.json({ posts: posts.length ? posts : (listSocialPostsByUserId(userId) || []).map((post) => (
       post ? { ...post, isVerified: verifiedAuthorIds.has(String(post.userId)) } : post
-    ))
-    return res.json({ posts })
+    )) })
   }
 
   const following = getSocialFollows(req.user.id);
@@ -121,9 +128,6 @@ router.get('/posts', authMiddleware, async (req, res) => {
     const pages = await listPageRecords()
     pagePostUserIds = (pages || []).map((page) => page.ownerId || page.id).filter(Boolean)
 
-    // Reuse the already-loaded page records (read-only) to map a page account's
-    // userId to its display (full) name so the feed can show the page's name,
-    // and to its blue-mark (verified) status.
     for (const page of pages || []) {
       if (!page?.pageName) continue
       const keys = [page.id, page.ownerId].filter((value) => value != null && value !== '')
@@ -139,8 +143,6 @@ router.get('/posts', authMiddleware, async (req, res) => {
     console.error('Failed to load page records for feed ordering:', error.message)
   }
 
-  // Blue-mark status belongs to the account, not the post. Resolve it at read
-  // time so verification changes apply to past, current, and future posts.
   let verifiedAuthorIds = new Set()
   try {
     verifiedAuthorIds = await listVerifiedUserIds()
@@ -148,12 +150,22 @@ router.get('/posts', authMiddleware, async (req, res) => {
     console.warn('Failed to resolve verified accounts for feed:', error.message)
   }
 
-  const pageResult = listSocialPostsPage(req.user.id, following, { pagePostUserIds, limit, cursor })
-  const posts = (pageResult.posts || []).map((post) => {
+  const mongoPosts = await listSocialPostsFromMongo({ suspended: { $ne: true } })
+  const sourcePosts = mongoPosts.length > 0 ? mongoPosts : listSocialPosts(req.user.id, following)
+  const visiblePosts = applyUserPostWeightedShuffle(getVisiblePosts(sourcePosts, req.user.id, following), { pagePostUserIds })
+
+  const startIndex = cursor
+    ? visiblePosts.findIndex((post) => String(post.id) === String(cursor.id)) + 1
+    : 0
+  const safeStartIndex = startIndex > 0 ? startIndex : 0
+  const pagePosts = visiblePosts.slice(safeStartIndex, safeStartIndex + limit)
+  const hasMore = safeStartIndex + pagePosts.length < visiblePosts.length
+  const lastPost = pagePosts.at(-1)
+
+  const posts = (pagePosts || []).map((post) => {
     if (!post) return post
     const authorId = String(post.userId)
     const pageName = pageFullNames.get(authorId)
-    // Page account posts show their full page name on the feed.
     if (pageName) {
       return {
         ...post,
@@ -167,10 +179,10 @@ router.get('/posts', authMiddleware, async (req, res) => {
 
     return { ...post, isVerified: verifiedAuthorIds.has(authorId) }
   });
-  const nextCursor = pageResult.nextCursor
-    ? Buffer.from(JSON.stringify(pageResult.nextCursor)).toString('base64url')
+  const nextCursor = hasMore && lastPost
+    ? Buffer.from(JSON.stringify({ id: lastPost.id, createdAt: lastPost.createdAt })).toString('base64url')
     : null
-  res.json({ posts, hasMore: pageResult.hasMore, nextCursor });
+  res.json({ posts, hasMore, nextCursor });
 });
 
 router.post('/posts', authMiddleware, upload.single('image'), async (req, res) => {
@@ -257,7 +269,7 @@ router.post('/posts', authMiddleware, upload.single('image'), async (req, res) =
   }
 });
 
-router.post('/posts/:id/likes', authMiddleware, (req, res) => {
+router.post('/posts/:id/likes', authMiddleware, async (req, res) => {
   const result = toggleSocialPostLike(req.params.id, {
     id: req.user.id,
     username: req.user.username,
@@ -265,6 +277,12 @@ router.post('/posts/:id/likes', authMiddleware, (req, res) => {
 
   if (!result) {
     return res.status(404).json({ message: 'Post not found' })
+  }
+
+  try {
+    await persistSocialPost(result.post)
+  } catch (error) {
+    console.error('Like persistence failed:', error.message)
   }
 
   res.json(result)
@@ -334,9 +352,9 @@ router.delete('/reports/:id', authMiddleware, requireRole('admin'), (req, res) =
 });
 
 // Admin: list all posts
-router.get('/posts/all', authMiddleware, requireRole('admin'), (req, res) => {
-  const posts = listAllSocialPosts()
-  res.json({ posts })
+router.get('/posts/all', authMiddleware, requireRole('admin'), async (req, res) => {
+  const posts = await listSocialPostsFromMongo({ suspended: { $ne: true } })
+  res.json({ posts: posts.length ? posts : listAllSocialPosts() })
 })
 
 // Admin: delete a post by id
@@ -348,11 +366,16 @@ router.delete('/posts/:id', authMiddleware, requireRole('admin'), (req, res) => 
 })
 
 // Admin: update a post (e.g., suspend/unsuspend)
-router.patch('/posts/:id', authMiddleware, requireRole('admin'), (req, res) => {
+router.patch('/posts/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   const { id } = req.params || {}
   const patch = req.body || {}
   const updated = updateSocialPostById(id, patch)
   if (!updated) return res.status(404).json({ message: 'Post not found' })
+  try {
+    await persistSocialPost(updated)
+  } catch (error) {
+    console.warn('Admin post update persistence failed:', error.message)
+  }
   res.json({ post: updated })
 })
 

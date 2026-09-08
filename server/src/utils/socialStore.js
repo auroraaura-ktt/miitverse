@@ -2,6 +2,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { persistSocialPost, deleteSocialPostFromMongo } from './socialPersistence.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = resolve(__dirname, '..', '..', 'data');
 const postsFile = resolve(dataDir, 'social-posts.json');
@@ -149,6 +151,9 @@ export function deleteSocialPostById(postId) {
   const posts = readJson(postsFile, []);
   const updated = (posts || []).filter((p) => p && String(p.id) !== String(postId));
   writeJson(postsFile, updated);
+  void deleteSocialPostFromMongo(postId).catch((error) => {
+    console.warn('MongoDB post delete failed:', error.message);
+  });
   return true;
 }
 
@@ -163,6 +168,11 @@ export function updateSocialPostById(postId, patch = {}) {
     return next;
   });
   writeJson(postsFile, updated);
+  if (changed) {
+    void persistSocialPost(changed).catch((error) => {
+      console.warn('MongoDB post update failed:', error.message);
+    });
+  }
   return changed;
 }
 
@@ -222,6 +232,9 @@ export function toggleSocialPostLike(postId, account) {
 
   if (!result) return null
   writeJson(postsFile, updated)
+  void persistSocialPost(result.post).catch((error) => {
+    console.warn('MongoDB like sync failed:', error.message)
+  })
   return result
 }
 
@@ -249,6 +262,9 @@ export function addSocialPostComment(postId, comment) {
 
   if (!updatedPost) return null
   writeJson(postsFile, updated)
+  void persistSocialPost(updatedPost).catch((error) => {
+    console.warn('MongoDB comment sync failed:', error.message)
+  })
   return { post: updatedPost, comment: updatedPost.comments.at(-1) }
 }
 

@@ -1,5 +1,18 @@
 [
   {
+    "id": "post-1788860852035",
+    "userId": "50aa0270-5db7-46b1-a4ee-d3179ab9c8cc",
+    "username": "Faculty of Computer Science",
+    "content": "Page post from admin verification",
+    "image": null,
+    "createdAt": "2026-09-08T09:47:32.035Z",
+    "likes": 0,
+    "likedBy": [],
+    "comments": [],
+    "reposts": 0,
+    "visibility": "public"
+  },
+  {
     "id": "post-1788179912381",
     "userId": "50aa0270-5db7-46b1-a4ee-d3179ab9c8cc",
     "username": "fcs",

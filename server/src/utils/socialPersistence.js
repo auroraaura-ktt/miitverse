@@ -48,6 +48,54 @@ export async function writeSocialPostToMongo(post) {
   ).lean()
 }
 
+export async function deleteSocialPostFromMongo(postId) {
+  const normalizedId = String(postId)
+  if (!normalizedId) return false
+
+  const result = await SocialPostModel.deleteOne({ id: normalizedId })
+  return Boolean(result.deletedCount)
+}
+
+export async function listSocialPostsFromMongo(filter = {}) {
+  const query = { ...filter }
+  if (!Object.prototype.hasOwnProperty.call(query, 'suspended')) {
+    query.suspended = { $ne: true }
+  }
+
+  const find = typeof globalThis.__mongoFindMock === 'function'
+    ? globalThis.__mongoFindMock
+    : SocialPostModel.find.bind(SocialPostModel)
+
+  let posts = await find(query)
+
+  if (Array.isArray(posts)) {
+    posts = posts.filter((post) => !post || post.suspended !== true)
+    posts.sort((left, right) => {
+      const leftTime = new Date(left?.createdAt || 0).getTime()
+      const rightTime = new Date(right?.createdAt || 0).getTime()
+      return rightTime - leftTime
+    })
+    return posts.map((post) => ({
+      ...post,
+      createdAt: post.createdAt instanceof Date ? post.createdAt.toISOString() : post.createdAt,
+    }))
+  }
+
+  if (posts && typeof posts.sort === 'function') {
+    posts = posts.sort((left, right) => {
+      const leftTime = new Date(left?.createdAt || 0).getTime()
+      const rightTime = new Date(right?.createdAt || 0).getTime()
+      return rightTime - leftTime
+    })
+  }
+
+  const result = Array.isArray(posts) ? posts : []
+  return result.map((post) => ({
+    ...post,
+    createdAt: post.createdAt instanceof Date ? post.createdAt.toISOString() : post.createdAt,
+  }))
+}
+
 export async function writeSocialPostToNeo4j(post) {
   const databasePost = toDatabasePost(post)
   const session = driver.session()
