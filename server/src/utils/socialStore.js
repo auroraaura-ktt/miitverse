@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 import { persistSocialPost, deleteSocialPostFromMongo } from './socialPersistence.js';
 
@@ -188,9 +189,14 @@ export function createSocialPost(post) {
   }
 
   const nextPost = {
-    id: post.id || `post-${Date.now()}`,
+    id: post.id || `post-${randomUUID()}`,
     userId: post.userId || 'guest',
     username: post.username || 'MiitVerse member',
+    source: post.source || 'user',
+    postType: post.postType || (post.source === 'page' ? 'page' : 'user'),
+    authorType: post.authorType || (post.source === 'page' ? 'page' : 'user'),
+    pageName: post.pageName || null,
+    profilePicture: post.profilePicture || null,
     content: post.content || '',
     image: post.image || imagePath || null,
     createdAt: post.createdAt || new Date().toISOString(),
@@ -198,6 +204,7 @@ export function createSocialPost(post) {
     likedBy: Array.isArray(post.likedBy) ? post.likedBy : [],
     comments: Array.isArray(post.comments) ? post.comments : [],
     reposts: Number(post.reposts || 0),
+    shares: Number(post.shares ?? post.reposts ?? 0),
     visibility: post.visibility || 'public',
   };
 

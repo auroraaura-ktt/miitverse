@@ -171,6 +171,7 @@ export default function Feed() {
         const formData = new FormData()
         formData.append('content', newPost.content || '')
         formData.append('username', resolvedUsername || newPost.username || 'MiitVerse member')
+        if (newPost.profilePicture) formData.append('profilePicture', newPost.profilePicture)
         formData.append('visibility', newPost.visibility || 'public')
         formData.append('image', newPost.imageFile)
 

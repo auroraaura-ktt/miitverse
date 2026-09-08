@@ -9,27 +9,80 @@ import { requireRole } from '../middleware/roleMiddleware.js';
 import {
   createSocialPost,
   getSocialFollows,
-  listSocialPosts,
-  listSocialPostsPage,
   saveSocialFollows,
   listAllSocialPosts,
   deleteSocialPostById,
   updateSocialPostById,
-  listSocialPostsByUserId,
   toggleSocialPostLike,
   addSocialPostComment,
   getVisiblePosts,
   applyUserPostWeightedShuffle,
 } from '../utils/socialStore.js';
 import { listPageRecords } from '../utils/pagePersistence.js';
-import { listSocialPostsFromMongo, persistSocialPost } from '../utils/socialPersistence.js';
-import { listVerifiedUserIds } from '../utils/userPersistence.js';
+import { deleteSocialPostFromDatabases, listSocialPostsFromMongo, persistSocialPost } from '../utils/socialPersistence.js';
+import { getUserFromMongo, listVerifiedUserIds } from '../utils/userPersistence.js';
 import { createReport, deleteReportById, listReports, updateReportById } from '../utils/reportStore.js';
 
 const router = Router();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const uploadDir = resolve(__dirname, '..', '..', 'data', 'uploads');
 const upload = multer({ storage: multer.memoryStorage() });
+
+async function enrichPostAuthors(posts = []) {
+  let pages = []
+  try {
+    pages = await listPageRecords()
+  } catch (error) {
+    console.warn('Failed to resolve page authors for posts:', error.message)
+  }
+  const authorsById = new Map()
+
+  for (const page of pages || []) {
+    for (const key of [page?.id, page?.ownerId]) {
+      if (key !== undefined && key !== null && key !== '') {
+        authorsById.set(String(key), page)
+      }
+    }
+  }
+
+  const userCache = new Map()
+  return Promise.all((posts || []).map(async (post) => {
+    if (!post) return post
+
+    const authorId = String(post.userId || '')
+    const page = authorsById.get(authorId)
+    if (page) {
+      const pageName = page.pageName || post.pageName || post.username
+      return {
+        ...post,
+        source: 'page',
+        postType: 'page',
+        authorType: 'page',
+        pageName,
+        author: pageName,
+        username: pageName,
+        profilePicture: post.profilePicture || page.coverImage || null,
+      }
+    }
+
+    if (!post.username || post.username === 'MiitVerse member' || !post.profilePicture) {
+      if (!userCache.has(authorId)) {
+        userCache.set(authorId, authorId ? getUserFromMongo(authorId).catch(() => null) : Promise.resolve(null))
+      }
+      const userRecord = await userCache.get(authorId)
+      if (userRecord) {
+        return {
+          ...post,
+          author: post.author || userRecord.username,
+          username: post.username && post.username !== 'MiitVerse member' ? post.username : userRecord.username,
+          profilePicture: post.profilePicture || userRecord.avatarUrl || null,
+        }
+      }
+    }
+
+    return { ...post, author: post.author || post.username }
+  }))
+}
 
 router.post('/uploads', authMiddleware, upload.single('image'), (req, res) => {
   const file = req.file;
@@ -109,14 +162,12 @@ router.get('/posts', authMiddleware, async (req, res) => {
       console.warn('Failed to resolve verified accounts for user posts:', error.message)
     }
 
-    const posts = (await listSocialPostsFromMongo({ userId: String(userId), suspended: { $ne: true } }))
+    const posts = (await enrichPostAuthors(await listSocialPostsFromMongo({ userId: String(userId), suspended: { $ne: true } })))
       .map((post) => (
         post ? { ...post, isVerified: verifiedAuthorIds.has(String(post.userId)) } : post
       ))
 
-    return res.json({ posts: posts.length ? posts : (listSocialPostsByUserId(userId) || []).map((post) => (
-      post ? { ...post, isVerified: verifiedAuthorIds.has(String(post.userId)) } : post
-    )) })
+    return res.json({ posts })
   }
 
   const following = getSocialFollows(req.user.id);
@@ -126,7 +177,9 @@ router.get('/posts', authMiddleware, async (req, res) => {
 
   try {
     const pages = await listPageRecords()
-    pagePostUserIds = (pages || []).map((page) => page.ownerId || page.id).filter(Boolean)
+    // A page post is authored with the page id, while older records may use
+    // the owner id. Keep both identifiers so either shape is recognized.
+    pagePostUserIds = (pages || []).flatMap((page) => [page?.id, page?.ownerId]).filter(Boolean)
 
     for (const page of pages || []) {
       if (!page?.pageName) continue
@@ -150,9 +203,10 @@ router.get('/posts', authMiddleware, async (req, res) => {
     console.warn('Failed to resolve verified accounts for feed:', error.message)
   }
 
-  const mongoPosts = await listSocialPostsFromMongo({ suspended: { $ne: true } })
-  const sourcePosts = mongoPosts.length > 0 ? mongoPosts : listSocialPosts(req.user.id, following)
-  const visiblePosts = applyUserPostWeightedShuffle(getVisiblePosts(sourcePosts, req.user.id, following), { pagePostUserIds })
+  // MongoDB is the shared source for both Feed and Admin. The JSON store is
+  // retained only as a local mirror for compatibility, never as a feed source.
+  const databasePosts = await listSocialPostsFromMongo({ suspended: { $ne: true } })
+  const visiblePosts = applyUserPostWeightedShuffle(getVisiblePosts(databasePosts, req.user.id, following), { pagePostUserIds })
 
   const startIndex = cursor
     ? visiblePosts.findIndex((post) => String(post.id) === String(cursor.id)) + 1
@@ -162,14 +216,17 @@ router.get('/posts', authMiddleware, async (req, res) => {
   const hasMore = safeStartIndex + pagePosts.length < visiblePosts.length
   const lastPost = pagePosts.at(-1)
 
-  const posts = (pagePosts || []).map((post) => {
+  const posts = await enrichPostAuthors(pagePosts || [])
+  const enrichedPosts = posts.map((post) => {
     if (!post) return post
     const authorId = String(post.userId)
-    const pageName = pageFullNames.get(authorId)
+    const pageName = post.pageName || pageFullNames.get(authorId)
     if (pageName) {
       return {
         ...post,
         source: 'page',
+        postType: 'page',
+        authorType: 'page',
         pageName,
         author: pageName,
         username: pageName,
@@ -177,12 +234,12 @@ router.get('/posts', authMiddleware, async (req, res) => {
       }
     }
 
-    return { ...post, isVerified: verifiedAuthorIds.has(authorId) }
+    return { ...post, source: post.source || 'user', postType: post.postType || 'user', authorType: post.authorType || 'user', isVerified: verifiedAuthorIds.has(authorId) }
   });
   const nextCursor = hasMore && lastPost
     ? Buffer.from(JSON.stringify({ id: lastPost.id, createdAt: lastPost.createdAt })).toString('base64url')
     : null
-  res.json({ posts, hasMore, nextCursor });
+  res.json({ posts: enrichedPosts, hasMore, nextCursor });
 });
 
 router.post('/posts', authMiddleware, upload.single('image'), async (req, res) => {
@@ -230,8 +287,8 @@ router.post('/posts', authMiddleware, upload.single('image'), async (req, res) =
     resolvedImageUrl = `/api/social/uploads/${fileName}`;
   }
 
-  if (!content.trim()) {
-    return res.status(400).json({ message: 'Post content is required' });
+  if (!content.trim() && !resolvedImageUrl) {
+    return res.status(400).json({ message: 'Post content or an image is required' });
   }
 
   const post = createSocialPost({
@@ -240,6 +297,11 @@ router.post('/posts', authMiddleware, upload.single('image'), async (req, res) =
     image: resolvedImageUrl,
     userId: postUserId,
     username: displayName,
+    // Persist the author type with the post. Feed reads can then render page
+    // updates even when page-record lookup is unavailable or stale.
+    ...(publishedOnBehalfOfPage
+      ? { source: 'page', postType: 'page', authorType: 'page', pageName: displayName }
+      : { source: 'user', postType: 'user', authorType: 'user', profilePicture: req.body?.profilePicture || null }),
     suspended: false,
   });
 
@@ -353,16 +415,23 @@ router.delete('/reports/:id', authMiddleware, requireRole('admin'), (req, res) =
 
 // Admin: list all posts
 router.get('/posts/all', authMiddleware, requireRole('admin'), async (req, res) => {
-  const posts = await listSocialPostsFromMongo({ suspended: { $ne: true } })
-  res.json({ posts: posts.length ? posts : listAllSocialPosts() })
+  const posts = await enrichPostAuthors(await listSocialPostsFromMongo({ includeSuspended: true }))
+  res.json({ posts })
 })
 
 // Admin: delete a post by id
-router.delete('/posts/:id', authMiddleware, requireRole('admin'), (req, res) => {
+router.delete('/posts/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   const { id } = req.params || {}
-  const ok = deleteSocialPostById(id)
-  if (!ok) return res.status(404).json({ message: 'Post not found' })
-  res.json({ message: 'Deleted' })
+  const exists = (await listSocialPostsFromMongo({ includeSuspended: true })).some((post) => String(post?.id) === String(id))
+  if (!exists) return res.status(404).json({ message: 'Post not found' })
+  try {
+    await deleteSocialPostFromDatabases(id)
+    deleteSocialPostById(id)
+    return res.json({ message: 'Deleted' })
+  } catch (error) {
+    console.error('Post deletion failed:', error.message)
+    return res.status(503).json({ message: 'Post could not be deleted from the database.' })
+  }
 })
 
 // Admin: update a post (e.g., suspend/unsuspend)

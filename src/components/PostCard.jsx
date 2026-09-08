@@ -34,6 +34,7 @@ export default function PostCard({ post = {}, onPostUpdated }) {
     likes = 0,
     comments = [],
     reposts = 0,
+    shares = reposts,
     likedBy = [],
   } = post;
 
@@ -57,7 +58,7 @@ export default function PostCard({ post = {}, onPostUpdated }) {
     postId: id,
     likes: Number(likes || 0),
     comments: initialCommentCount,
-    shares: Number(reposts || 0),
+    shares: Number(shares ?? reposts ?? 0),
     liked: initialLikers.some((entry) => String(entry?.userId) === String(user?.id)),
     likers: initialLikers,
   });
@@ -74,12 +75,12 @@ export default function PostCard({ post = {}, onPostUpdated }) {
       ...current,
       likes: Number(likes || 0),
       comments: initialCommentCount,
-      shares: Number(reposts || 0),
+      shares: Number(shares ?? reposts ?? 0),
       liked: nextLikers.some((entry) => String(entry?.userId) === String(user?.id)),
       likers: nextLikers,
     }));
     setPostComments(Array.isArray(comments) ? comments : []);
-  }, [id, likes, initialCommentCount, reposts, user?.id, likedBy, comments]);
+  }, [id, likes, initialCommentCount, reposts, shares, user?.id, likedBy, comments]);
 
   const handleLike = async () => {
     if (liking || !user?.id) return;

@@ -603,23 +603,14 @@ export default function Admin() {
         headers: { Authorization: `Bearer ${token}` },
       })
 
-      const fetchedPages = await (async () => {
-        try {
-          const pagesData = await apiRequest('/auth/pages', { headers: { Authorization: `Bearer ${token}` } })
-          return pagesData.pages || []
-        } catch (e) {
-          return pages || []
-        }
-      })()
-
       const posts = (data.posts || []).map((p) => {
-        const matchedPage = (fetchedPages || []).find((pg) => pg.id === p.userId)
-        const isPage = Boolean(matchedPage)
+        const authorType = p.authorType || (p.source === 'page' || p.postType === 'page' ? 'page' : 'user')
         return {
           ...p,
-          source: isPage ? 'page' : 'user',
+          source: authorType,
+          authorType,
           author: p.username || p.author || 'User',
-          pageName: matchedPage?.pageName || null,
+          pageName: p.pageName || null,
         }
       })
 
@@ -1152,11 +1143,13 @@ export default function Admin() {
                   <div key={post.id} className="admin-post-row">
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <strong>{post.source === 'page' ? `${post.pageName} (page)` : post.author}</strong>
+                        <strong>{post.source === 'page' ? (post.pageName || post.author) : post.author} <small>({post.authorType === 'page' ? 'Page' : 'User'})</small></strong>
                         <small>{post.createdAt ? new Date(post.createdAt).toLocaleString() : ''}</small>
                       </div>
+                      <small>Post ID: {post.id} · Author ID: {post.userId}</small>
                       <p style={{ marginTop: '6px' }}>{post.content}</p>
                       {post.image ? <img src={post.image} alt="post" style={{ maxWidth: '240px', marginTop: '6px' }} /> : null}
+                      <small>Reactions: {Math.max(Number(post.likes || 0), Array.isArray(post.likedBy) ? post.likedBy.length : 0)} · Comments: {Array.isArray(post.comments) ? post.comments.length : Number(post.comments || 0)} · Shares: {Number(post.shares ?? post.reposts ?? 0)} · Visibility: {post.visibility || 'public'}</small>
                     </div>
                     <div className="admin-post-actions">
                       <button type="button" className="admin-delete-btn" onClick={() => handleDeletePost(post)}>Delete</button>
