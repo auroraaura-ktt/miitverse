@@ -6,6 +6,7 @@ import express from 'express'
 import authRoutes from './routes/authRoutes.js'
 import userRoutes from './routes/userRoutes.js'
 import socialRoutes from './routes/socialRoutes.js'
+import feedbackRoutes from './routes/feedbackRoutes.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -27,13 +28,14 @@ app.get('/api/health', (req, res) => {
 app.get('/api', (req, res) => {
   res.json({
     message: 'MiitVerse API root',
-    routes: ['/api/health', '/api/auth', '/api/users'],
+    routes: ['/api/health', '/api/auth', '/api/users', '/api/social', '/api/feedback'],
   })
 })
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/social', socialRoutes)
+app.use('/api/feedback', feedbackRoutes)
 
 // Serve frontend build assets
 app.use(express.static(staticPath, {

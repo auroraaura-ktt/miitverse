@@ -21,6 +21,7 @@ import {
 } from '../utils/socialStore.js';
 import { listPageRecords } from '../utils/pagePersistence.js';
 import { persistSocialPost } from '../utils/socialPersistence.js';
+import { listVerifiedUserIds } from '../utils/userPersistence.js';
 import { createReport, deleteReportById, listReports, updateReportById } from '../utils/reportStore.js';
 
 const router = Router();
@@ -59,6 +60,33 @@ router.get('/uploads/:fileName', (req, res) => {
   res.send(fileBuffer);
 });
 
+router.get('/verified-authors', authMiddleware, async (req, res) => {
+  try {
+    const ids = await listVerifiedUserIds();
+    // Page accounts carry their own blue mark on the page record (not the user
+    // record), so merge verified page ids in as well. Every post card resolves
+    // the badge against this set, so the change applies immediately to old,
+    // current, and future posts without touching any post.
+    try {
+      const pages = await listPageRecords();
+      for (const page of pages || []) {
+        if (!page || page.verified === false) continue;
+        for (const key of [page.ownerId, page.id]) {
+          if (key !== undefined && key !== null && key !== '') {
+            ids.add(String(key));
+          }
+        }
+      }
+    } catch (pageError) {
+      console.warn('Failed to resolve verified page accounts:', pageError.message);
+    }
+    return res.json({ verifiedAuthorIds: [...ids] });
+  } catch (error) {
+    console.error('Failed to load verified accounts:', error.message);
+    return res.status(500).json({ message: 'Failed to load verified accounts' });
+  }
+});
+
 router.get('/posts', authMiddleware, async (req, res) => {
   const { userId, cursor: rawCursor } = req.query || {}
   const limit = Math.min(50, Math.max(1, Number(req.query?.limit) || 8))
@@ -71,20 +99,31 @@ router.get('/posts', authMiddleware, async (req, res) => {
     }
   }
   if (userId) {
-    const posts = listSocialPostsByUserId(userId)
+    let verifiedAuthorIds = new Set()
+    try {
+      verifiedAuthorIds = await listVerifiedUserIds()
+    } catch (error) {
+      console.warn('Failed to resolve verified accounts for user posts:', error.message)
+    }
+
+    const posts = (listSocialPostsByUserId(userId) || []).map((post) => (
+      post ? { ...post, isVerified: verifiedAuthorIds.has(String(post.userId)) } : post
+    ))
     return res.json({ posts })
   }
 
   const following = getSocialFollows(req.user.id);
   let pagePostUserIds = []
   const pageFullNames = new Map()
+  const pageVerified = new Map()
 
   try {
     const pages = await listPageRecords()
     pagePostUserIds = (pages || []).map((page) => page.ownerId || page.id).filter(Boolean)
 
     // Reuse the already-loaded page records (read-only) to map a page account's
-    // userId to its display (full) name so the feed can show the page's name.
+    // userId to its display (full) name so the feed can show the page's name,
+    // and to its blue-mark (verified) status.
     for (const page of pages || []) {
       if (!page?.pageName) continue
       const keys = [page.id, page.ownerId].filter((value) => value != null && value !== '')
@@ -92,6 +131,7 @@ router.get('/posts', authMiddleware, async (req, res) => {
         const normalizedKey = String(key)
         if (!pageFullNames.has(normalizedKey)) {
           pageFullNames.set(normalizedKey, page.pageName)
+          pageVerified.set(normalizedKey, Boolean(page.verified))
         }
       }
     }
@@ -99,15 +139,33 @@ router.get('/posts', authMiddleware, async (req, res) => {
     console.error('Failed to load page records for feed ordering:', error.message)
   }
 
+  // Blue-mark status belongs to the account, not the post. Resolve it at read
+  // time so verification changes apply to past, current, and future posts.
+  let verifiedAuthorIds = new Set()
+  try {
+    verifiedAuthorIds = await listVerifiedUserIds()
+  } catch (error) {
+    console.warn('Failed to resolve verified accounts for feed:', error.message)
+  }
+
   const pageResult = listSocialPostsPage(req.user.id, following, { pagePostUserIds, limit, cursor })
   const posts = (pageResult.posts || []).map((post) => {
     if (!post) return post
-    const pageName = pageFullNames.get(String(post.userId))
+    const authorId = String(post.userId)
+    const pageName = pageFullNames.get(authorId)
     // Page account posts show their full page name on the feed.
     if (pageName) {
-      return { ...post, source: 'page', pageName, author: pageName, username: pageName }
+      return {
+        ...post,
+        source: 'page',
+        pageName,
+        author: pageName,
+        username: pageName,
+        isVerified: pageVerified.get(authorId) ?? verifiedAuthorIds.has(authorId) ?? false,
+      }
     }
-    return post
+
+    return { ...post, isVerified: verifiedAuthorIds.has(authorId) }
   });
   const nextCursor = pageResult.nextCursor
     ? Buffer.from(JSON.stringify(pageResult.nextCursor)).toString('base64url')
@@ -118,6 +176,7 @@ router.get('/posts', authMiddleware, async (req, res) => {
 router.post('/posts', authMiddleware, upload.single('image'), async (req, res) => {
   let postUserId = req.user.id;
   let displayName = req.body?.username || req.user?.username || req.body?.user?.username || 'MiitVerse member';
+  let publishedOnBehalfOfPage = null;
 
   // Admin accounts must not publish posts under their own identity. They may
   // only publish through a page dashboard, where the post belongs to the page.
@@ -137,6 +196,7 @@ router.post('/posts', authMiddleware, upload.single('image'), async (req, res) =
       }
       postUserId = page.id;
       displayName = page.pageName || displayName;
+      publishedOnBehalfOfPage = page;
     } catch (error) {
       console.error('Failed to resolve page record for admin post:', error.message);
       return res.status(500).json({ message: 'Failed to resolve page for publishing' });
@@ -173,7 +233,22 @@ router.post('/posts', authMiddleware, upload.single('image'), async (req, res) =
 
   try {
     const persistence = await persistSocialPost(post);
-    res.status(201).json({ post, persistence });
+
+    // The blue mark belongs to the account. Resolve it for the freshly created
+    // post so the author's own new post shows the badge without waiting for the
+    // next feed refresh. It is never persisted on the post itself.
+    let authorVerified = false;
+    if (publishedOnBehalfOfPage) {
+      authorVerified = Boolean(publishedOnBehalfOfPage.verified);
+    } else {
+      try {
+        authorVerified = (await listVerifiedUserIds()).has(String(postUserId));
+      } catch (error) {
+        console.warn('Failed to resolve author verification for new post:', error.message);
+      }
+    }
+
+    return res.status(201).json({ post: { ...post, isVerified: authorVerified }, persistence });
   } catch (error) {
     // Keep Neo4j mandatory: do not report success if the graph write failed.
     console.error('Neo4j post persistence failed:', error.message);

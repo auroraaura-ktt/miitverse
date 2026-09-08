@@ -277,7 +277,7 @@ export default function Profile() {
               <div className="mv-name-line">
                 <h1>{user.username}</h1>
 
-                {user.verified !== false && (
+                {user.verified && (
                   <span
                     className="mv-verified"
                     title="Verified MiitVerse account"

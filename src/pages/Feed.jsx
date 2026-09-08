@@ -7,10 +7,12 @@ import TopBar from "../components/TopBar"
 import CreatePost from "../components/CreatePost"
 import PostList from "../components/PostList"
 import { getVisiblePosts, isPagePost, shouldPersistSocialPost, toggleFollowRelationship } from "../lib/socialFeed"
+import { useVerifiedAuthors } from "../lib/useVerifiedAuthors"
 import { apiRequest } from "../lib/api"
 
 export default function Feed() {
   const { user, ready } = useAuth()
+  const verifiedAuthors = useVerifiedAuthors()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
   const [posts, setPosts] = useState([])
@@ -243,16 +245,35 @@ export default function Feed() {
     [posts, user?.id, following]
   )
 
+  // Blue-mark status belongs to the account. Every post card resolves the
+  // badge from the author's CURRENT account state via the live
+  // verified-accounts set (server-resolved at read time, never stored on the
+  // post), so Admin enable/disable changes apply immediately to past, current,
+  // and future posts without touching any post.
+  const accountVerifiedPosts = useMemo(
+    () => visiblePosts.map((post) => {
+      if (!post) return post
+
+      const postUserId = post.userId ?? post.authorId ?? post.ownerId ?? null
+      const authorIsVerified = !!postUserId && !!verifiedAuthors && verifiedAuthors.has(String(postUserId))
+      return {
+        ...post,
+        isVerified: Boolean(authorIsVerified || (postUserId && String(postUserId) === String(user?.id) && Boolean(user?.verified))),
+      }
+    }),
+    [visiblePosts, verifiedAuthors, user?.id, user?.verified]
+  )
+
   // Split the already-retrieved, already-sorted feed posts into the two tabs.
   // This reuses the existing feed data and algorithm; it only decides which
   // existing posts are shown in each feed based on the account type.
   const userPosts = useMemo(
-    () => visiblePosts.filter((post) => !isPagePost(post)),
-    [visiblePosts]
+    () => accountVerifiedPosts.filter((post) => !isPagePost(post)),
+    [accountVerifiedPosts]
   )
   const pagePosts = useMemo(
-    () => visiblePosts.filter((post) => isPagePost(post)),
-    [visiblePosts]
+    () => accountVerifiedPosts.filter((post) => isPagePost(post)),
+    [accountVerifiedPosts]
   )
 
   const feedPosts = activeFeed === 'page' ? pagePosts : userPosts
@@ -286,34 +307,48 @@ export default function Feed() {
           </div>
         </section>
 
-        <nav className="feed-nav" role="tablist" aria-label="Feed type">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeFeed === 'current'}
-            className={`feed-tab ${activeFeed === 'current' ? 'active' : ''}`}
-            onClick={() => setActiveFeed('current')}
-          >
-            Current
-          </button>
+        <CreatePost onAddPost={handleAddPost} onRefresh={loadFeedData} isRefreshing={isLoading} />
 
+        <div className="tabs" role="tablist" aria-label="Feed type">
           <button
             type="button"
             role="tab"
             aria-selected={activeFeed === 'page'}
-            className={`feed-tab ${activeFeed === 'page' ? 'active' : ''}`}
+            className={`tab ${activeFeed === 'page' ? 'active' : ''}`}
             onClick={() => setActiveFeed('page')}
           >
+            <div className="tab-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M7 20V4h11l-2.5 3L18 10H7" />
+                <path d="M7 4v16" />
+              </svg>
+
+              <span className="notification">{pagePosts.length}</span>
+            </div>
+
             Page
           </button>
 
-          <span
-            className={`feed-indicator ${activeFeed === 'page' ? 'page-active' : ''}`}
-            aria-hidden="true"
-          />
-        </nav>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFeed === 'current'}
+            className={`tab ${activeFeed === 'current' ? 'active' : ''}`}
+            onClick={() => setActiveFeed('current')}
+          >
+            <div className="tab-icon">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="7" r="3.5" />
+                <path d="M5 21c.5-4.1 2.9-6.5 7-6.5s6.5 2.4 7 6.5" />
+              </svg>
 
-        <CreatePost onAddPost={handleAddPost} onRefresh={loadFeedData} isRefreshing={isLoading} />
+              <span className="notification">{userPosts.length}</span>
+            </div>
+
+            User
+          </button>
+        </div>
+
         <PostList
           posts={feedPosts}
           isLoading={isLoading}

@@ -1243,6 +1243,18 @@ body::-webkit-scrollbar {
   height:calc(100vh - 40px);
   box-shadow:0 20px 40px rgba(8,28,77,.18);
   border:1px solid rgba(255,255,255,.05);
+  display:flex;
+  flex-direction:column;
+  overflow-y:auto;
+}
+
+.sidebar-menu-main {
+  margin-top: 8px;
+}
+
+.sidebar-menu-bottom {
+  margin-top: auto;
+  padding-top: 20px;
 }
 
 .left-sidebar h2{
@@ -1291,6 +1303,30 @@ body::-webkit-scrollbar {
 .left-sidebar li svg,
 .sidebar-menu li svg {
   font-size:20px;
+}
+
+.sidebar-action-btn {
+  color: inherit;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border-radius: 16px;
+  transition: .25s ease;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.sidebar-action-btn svg {
+  font-size:20px;
+  flex-shrink: 0;
+}
+.sidebar-action-btn span {
+  flex:1;
 }
 
 .left-sidebar li:hover,
@@ -3102,5 +3138,105 @@ body::-webkit-scrollbar {
   .otp-box {
     width: 42px;
     height: 50px;
+  }
+}
+
+/* ============================================================
+   FEED TAB NAVIGATION (reused from Design.jsx)
+   Icon/navigation section shown between the post textbox and
+   the post card/feed list.
+   ============================================================ */
+.tabs {
+  height: 62px;
+  border-bottom: 1px solid #dce5f0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 150px;
+  margin-bottom: 22px;
+}
+
+.tab {
+  height: 52px;
+  min-width: 92px;
+  background: transparent;
+  color: #7787a4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 12.5px;
+  font-weight: 600;
+  position: relative;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.25s ease;
+}
+
+.tab.active {
+  color: #0b214c;
+}
+
+.tab.active::after {
+  content: "";
+  position: absolute;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: #0c224f;
+  width: 92px;
+  bottom: -1px;
+}
+
+.tab-icon {
+  width: 22px;
+  height: 22px;
+  position: relative;
+  color: currentColor;
+}
+
+.tab-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.notification {
+  position: absolute;
+  right: -7px;
+  top: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f72b5e;
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 900px) {
+  .tabs {
+    gap: 70px;
+  }
+}
+
+@media (max-width: 600px) {
+  .tabs {
+    height: 56px;
+    gap: 50px;
+    margin-bottom: 16px;
+  }
+
+  .tab {
+    height: 48px;
   }
 }

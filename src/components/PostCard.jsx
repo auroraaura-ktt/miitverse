@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import ReactionModal from "./ReactionModal";
 import VerifiedBadge from "./VerifiedBadge";
 import { useAuth } from "../context/useAuth";
+import { useVerifiedAuthors } from "../lib/useVerifiedAuthors";
 import { apiRequest } from "../lib/api";
 
 function formatTimestamp(value) {
@@ -19,6 +20,9 @@ function formatTimestamp(value) {
 }
 
 export default function PostCard({ post = {}, onPostUpdated }) {
+  const { user } = useAuth();
+  const verifiedAuthors = useVerifiedAuthors();
+
   const {
     id = "default",
     username = post.author || post.username || "",
@@ -31,10 +35,20 @@ export default function PostCard({ post = {}, onPostUpdated }) {
     comments = [],
     reposts = 0,
     likedBy = [],
-    verified = true,
   } = post;
 
-  const { user } = useAuth();
+  // Verification belongs to the account, never to the post. The badge is
+  // derived exclusively from the author's CURRENT account state (the live
+  // verified-accounts set, which the server resolves at read time) so admin
+  // enable/disable changes apply immediately to old, current, and future
+  // posts without editing or recreating any post.
+  const postUserId = post.userId ?? post.authorId ?? post.ownerId ?? null;
+  const ownAccountVerified = String(postUserId ?? '') === String(user?.id ?? '') && Boolean(user?.verified);
+  const authorIsVerified = !!postUserId && !!verifiedAuthors && verifiedAuthors.has(String(postUserId));
+  const isVerified = Boolean(
+    ownAccountVerified ||
+    authorIsVerified
+  );
 
   const initialCommentCount = Array.isArray(comments) ? comments.length : Number(comments || 0);
 
@@ -205,7 +219,7 @@ export default function PostCard({ post = {}, onPostUpdated }) {
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <span className="post-card-author" style={{ fontWeight: "600" }}>{displayName}</span>
-                {verified && <VerifiedBadge size="small" />}
+                {isVerified && <VerifiedBadge size="small" />}
               </div>
               <div className="post-card-time">{formatTimestamp(createdAt)}</div>
             </div>
@@ -363,7 +377,7 @@ export default function PostCard({ post = {}, onPostUpdated }) {
               marginBottom: "0",
             }}
           >
-            <strong>{displayName}</strong> {verified && <VerifiedBadge size="small" />} {content.substring(0, 80)}
+            <strong>{displayName}</strong> {isVerified && <VerifiedBadge size="small" />} {content.substring(0, 80)}
             {content.length > 80 ? "..." : ""}
           </p>
         </div>

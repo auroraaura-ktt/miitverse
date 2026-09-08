@@ -150,6 +150,7 @@
 .comment-copy { min-width: 0; flex: 1; }
 .comment-meta { display: flex; gap: 8px; align-items: baseline; color: #0b1e4f; font-size: 14px; }
 .comment-meta time { color: #98a2b3; font-size: 11px; }
+.comment-name { display: inline-flex; align-items: center; gap: 5px; }
 .comment-copy p { margin: 6px 0 0; color: #45546f; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .comments-empty { display: grid; justify-items: center; gap: 7px; padding: 48px 20px; color: #7b879b; text-align: center; }
 .comments-empty strong { color: #0b1e4f; }

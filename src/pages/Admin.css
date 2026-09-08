@@ -381,6 +381,36 @@
 .admin-bar.gold { background: #e5ae2f; }
 .admin-bar.green { background: #42aa83; }
 .admin-bar.red { background: #dc6873; }
+.admin-bar.purple { background: #8b5cf6; }
+
+/* Feedback stars in admin */
+.admin-feedback-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #cbd5e1;
+}
+
+.admin-feedback-stars svg {
+  font-size: 18px;
+  color: #cbd5e1;
+}
+
+.admin-feedback-stars svg.filled {
+  color: #f5b62d;
+}
+
+.admin-feedback-rating-num {
+  margin-left: 8px;
+  font-weight: 700;
+  color: #364152;
+}
+
+.admin-feedback-message {
+  max-width: 420px;
+  white-space: normal !important;
+  word-break: break-word;
+}
 
 .admin-bar-column small,
 .admin-line-labels small {
@@ -1281,6 +1311,12 @@
 
 /* BLUE MARK BADGES */
 
+.admin-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .admin-verified-badge {
   display: inline-flex;
   align-items: center;
@@ -1338,6 +1374,50 @@
 }
 
 .admin-verified-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Quick verify/remove-verification toggle inside the Manage Users and Page Accounts lists */
+.admin-verify-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.admin-verify-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #1d6fe0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #ffffff;
+  color: #1d6fe0;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.admin-verify-toggle-btn:hover:not(:disabled) {
+  background: #1d6fe0;
+  color: #ffffff;
+}
+
+.admin-verify-toggle-btn.enabled {
+  background: #1d6fe0;
+  color: #ffffff;
+}
+
+.admin-verify-toggle-btn.enabled:hover:not(:disabled) {
+  background: #1458b8;
+  border-color: #1458b8;
+}
+
+.admin-verify-toggle-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

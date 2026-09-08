@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { apiRequest } from "../lib/api";
+import { useVerifiedAuthors } from "../lib/useVerifiedAuthors";
 import { useAuth } from "../context/useAuth";
+import VerifiedBadge from "./VerifiedBadge";
 
 function formatCommentTime(value) {
   const date = new Date(value);
@@ -17,6 +19,7 @@ function initials(name = "User") {
 
 export default function ReactionModal({ isOpen, onClose, reactions, likers = [], comments = [], onCommentAdded }) {
   const { user } = useAuth();
+  const verifiedIds = useVerifiedAuthors();
   const [activeTab, setActiveTab] = useState("comments");
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -73,7 +76,7 @@ export default function ReactionModal({ isOpen, onClose, reactions, likers = [],
               <div className="comment-list">
                 {comments.length === 0 ? <div className="comments-empty"><div className="comments-empty-icon">&#9993;</div><strong>Start the conversation</strong><span>Be the first person to share a thought.</span></div> : comments.map((comment) => {
                   const name = comment.username || "MiitVerse member";
-                  return <article className="comment-item" key={comment.id || `${comment.userId}-${comment.createdAt}`}><div className="comment-avatar">{initials(name)}</div><div className="comment-copy"><div className="comment-meta"><strong>{name}</strong><time>{formatCommentTime(comment.createdAt)}</time></div><p>{comment.content}</p></div></article>;
+                  return <article className="comment-item" key={comment.id || `${comment.userId}-${comment.createdAt}`}><div className="comment-avatar">{initials(name)}</div><div className="comment-copy"><div className="comment-meta"><span className="comment-name"><strong>{name}</strong>{verifiedIds?.has(String(comment.userId)) && <VerifiedBadge size="small" />}</span><time>{formatCommentTime(comment.createdAt)}</time></div><p>{comment.content}</p></div></article>;
                 })}
               </div>
               <form className="comment-composer" onSubmit={submitComment}>
@@ -82,7 +85,7 @@ export default function ReactionModal({ isOpen, onClose, reactions, likers = [],
               </form>
               {error && <p className="comment-error" role="alert">{error}</p>}
             </>
-          ) : <div className="like-list">{likers.length === 0 ? <div className="comments-empty"><strong>No likes yet</strong><span>Be the first to react.</span></div> : likers.map((liker) => { const name = liker.username || "MiitVerse member"; return <div className="like-item" key={liker.userId}><div className="comment-avatar">{initials(name)}</div><strong>{name}</strong><span>Liked this post</span></div>; })}</div>}
+          ) : <div className="like-list">{likers.length === 0 ? <div className="comments-empty"><strong>No likes yet</strong><span>Be the first to react.</span></div> : likers.map((liker) => { const name = liker.username || "MiitVerse member"; return <div className="like-item" key={liker.userId}><div className="comment-avatar">{initials(name)}</div><span className="comment-name"><strong>{name}</strong>{verifiedIds?.has(String(liker.userId)) && <VerifiedBadge size="small" />}</span><span>Liked this post</span></div>; })}</div>}
         </div>
       </section>
     </div>

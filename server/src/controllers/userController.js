@@ -37,6 +37,7 @@ export async function getCurrentUser(req, res) {
           role: mongoUser.role,
           createdAt: mongoUser.createdAt,
           avatarUrl: mongoUser.avatarUrl || '',
+          verified: Boolean(mongoUser.verified),
         },
       })
     }
@@ -74,6 +75,7 @@ export async function getCurrentUser(req, res) {
         role: user.role,
         createdAt: user.createdAt,
         avatarUrl: user.avatarUrl || '',
+        verified: Boolean(user.verified),
       },
     })
   } finally {
@@ -293,7 +295,7 @@ export async function listUsers(req, res, deps = {}) {
           email: user.email,
           role: user.role,
           suspended: Boolean(user.suspended),
-          verified: user.verified !== undefined ? Boolean(user.verified) : true,
+          verified: user.verified !== undefined ? Boolean(user.verified) : false,
           createdAt: user.createdAt,
         }
       }),
