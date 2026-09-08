@@ -59,12 +59,12 @@ function sendVerificationEmailInBackground(email, code, pendingRegistration) {
     })
 }
 
-function getCanonicalClientOrigin() {
-  const rawOrigin = (env.clientOrigin || 'https://miitverse.onrender.com').trim()
+function normalizeClientOrigin(value, fallback = 'https://miitverse-xi.vercel.app') {
+  const rawOrigin = String(value ?? '').trim()
   const cleanedOrigin = rawOrigin.replace(/\/+$/g, '')
 
   if (!cleanedOrigin) {
-    return 'https://miitverse.onrender.com'
+    return fallback
   }
 
   if (/^https?:\/\//i.test(cleanedOrigin)) {
@@ -72,6 +72,15 @@ function getCanonicalClientOrigin() {
   }
 
   return `https://${cleanedOrigin}`
+}
+
+function getCanonicalClientOrigin() {
+  const vercelOrigin = process.env.VERCEL_URL ? normalizeClientOrigin(`https://${process.env.VERCEL_URL}`, '') : ''
+  const renderOrigin = normalizeClientOrigin(process.env.RENDER_EXTERNAL_URL, '')
+  const configuredOrigin = normalizeClientOrigin(env.clientOrigin, '')
+  const fallbackOrigin = 'https://miitverse-xi.vercel.app'
+
+  return [vercelOrigin, renderOrigin, configuredOrigin, fallbackOrigin].find(Boolean) || fallbackOrigin
 }
 
 export function buildInvitationLink(email) {

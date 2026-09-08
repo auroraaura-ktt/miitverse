@@ -11,10 +11,55 @@ test('normalizeVerificationCode strips spaces and non-digits before validating a
 })
 
 test('buildInvitationLink uses the canonical MiitVerse origin and encodes the email safely', () => {
-  assert.equal(
-    buildInvitationLink('student@miit.edu.mm'),
-    'https://miitverse.onrender.com/register?email=student%40miit.edu.mm'
-  )
+  const originalRenderOrigin = process.env.RENDER_EXTERNAL_URL
+  const originalVercelUrl = process.env.VERCEL_URL
+  const originalClientOrigin = process.env.CLIENT_ORIGIN
+
+  delete process.env.RENDER_EXTERNAL_URL
+  delete process.env.VERCEL_URL
+  process.env.CLIENT_ORIGIN = 'https://miitverse-xi.vercel.app'
+
+  try {
+    assert.equal(
+      buildInvitationLink('student@miit.edu.mm'),
+      'https://miitverse-xi.vercel.app/register?email=student%40miit.edu.mm'
+    )
+  } finally {
+    if (originalRenderOrigin === undefined) delete process.env.RENDER_EXTERNAL_URL
+    else process.env.RENDER_EXTERNAL_URL = originalRenderOrigin
+
+    if (originalVercelUrl === undefined) delete process.env.VERCEL_URL
+    else process.env.VERCEL_URL = originalVercelUrl
+
+    if (originalClientOrigin === undefined) delete process.env.CLIENT_ORIGIN
+    else process.env.CLIENT_ORIGIN = originalClientOrigin
+  }
+})
+
+test('buildInvitationLink prefers the Vercel production host over stale Render defaults', () => {
+  const originalRenderOrigin = process.env.RENDER_EXTERNAL_URL
+  const originalVercelUrl = process.env.VERCEL_URL
+  const originalClientOrigin = process.env.CLIENT_ORIGIN
+
+  process.env.RENDER_EXTERNAL_URL = 'https://miitverse.onrender.com'
+  process.env.VERCEL_URL = 'miitverse-xi.vercel.app'
+  process.env.CLIENT_ORIGIN = 'https://miitverse-xi.vercel.app'
+
+  try {
+    assert.equal(
+      buildInvitationLink('student@miit.edu.mm'),
+      'https://miitverse-xi.vercel.app/register?email=student%40miit.edu.mm'
+    )
+  } finally {
+    if (originalRenderOrigin === undefined) delete process.env.RENDER_EXTERNAL_URL
+    else process.env.RENDER_EXTERNAL_URL = originalRenderOrigin
+
+    if (originalVercelUrl === undefined) delete process.env.VERCEL_URL
+    else process.env.VERCEL_URL = originalVercelUrl
+
+    if (originalClientOrigin === undefined) delete process.env.CLIENT_ORIGIN
+    else process.env.CLIENT_ORIGIN = originalClientOrigin
+  }
 })
 
 test('resolveSendgridFromAddress avoids personal mailbox senders that hurt delivery', () => {

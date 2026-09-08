@@ -1174,7 +1174,7 @@ export default function Admin() {
 
             <div className="admin-invite-link">
               <strong>Invitation Link:</strong>
-              <a href="https://miitverse.onrender.com/register" target="_blank" rel="noreferrer">https://miitverse.onrender.com</a>
+              <a href="https://miitverse-xi.vercel.app/register" target="_blank" rel="noreferrer">https://miitverse-xi.vercel.app</a>
             </div>
 
             {inviteMessage.text && (
