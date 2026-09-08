@@ -259,7 +259,9 @@ export function addSocialPostComment(postId, comment) {
   const updated = posts.map((post) => {
     if (!post || String(post.id) !== String(postId)) return post
 
-    ({ post: updatedPost } = addCommentToPost(post, comment))
+    const added = addCommentToPost(post, comment)
+    if (!added) return post
+    updatedPost = added.post
     return updatedPost
   })
 

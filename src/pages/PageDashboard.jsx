@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { FaArrowLeft, FaBullhorn, FaChartLine, FaImage, FaPen } from 'react-icons/fa'
 
 import { useAuth } from '../context/useAuth'
-import { apiRequest } from '../lib/api'
+import { apiRequest, resolveApiUrl } from '../lib/api'
 import { buildPagePost, normalizePagePosts } from '../lib/pagePosts'
 import LoadingState from '../components/LoadingState'
 import './PageDashboard.css'
@@ -160,7 +160,7 @@ export default function PageDashboard() {
       return (
         <section className="page-posts-card" id="recent-posts">
           <div className="page-card-heading"><div><p className="page-kicker">ACTIVITY</p><h2>Recent page posts</h2></div><span className="page-post-count">{posts.length} total</span></div>
-          {posts.length === 0 ? <div className="page-empty-state"><FaBullhorn /><h3>Your page has no posts yet</h3><p>Create the first update to start your page activity.</p><button type="button" className="page-empty-action" onClick={() => setActiveTab('create-post')}>Create an update</button></div> : <div className="page-post-list">{posts.map((post) => <article className="page-post" key={post.id}><span className="page-avatar small">{pageInitial}</span><div><strong>{pageTitle}</strong><time>{new Date(post.createdAt).toLocaleString()}</time><p>{post.content}</p>{post.image && <img src={post.image} alt="Post attachment" />}</div></article>)}</div>}
+          {posts.length === 0 ? <div className="page-empty-state"><FaBullhorn /><h3>Your page has no posts yet</h3><p>Create the first update to start your page activity.</p><button type="button" className="page-empty-action" onClick={() => setActiveTab('create-post')}>Create an update</button></div> : <div className="page-post-list">{posts.map((post) => <article className="page-post" key={post.id}><span className="page-avatar small">{pageInitial}</span><div><strong>{pageTitle}</strong><time>{new Date(post.createdAt).toLocaleString()}</time><p>{post.content}</p>{post.image && <img src={resolveApiUrl(post.image.replace(/^\/api(?=\/)/, ''))} alt="Post attachment" />}</div></article>)}</div>}
         </section>
       )
     }

@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../context/useAuth'
-import { apiRequest } from '../lib/api'
+import { apiRequest, resolveApiUrl } from '../lib/api'
 import { invalidateVerifiedAuthorsCache } from '../lib/useVerifiedAuthors'
 import LoadingState from '../components/LoadingState'
 import VerifiedBadge from '../components/VerifiedBadge'
@@ -1148,7 +1148,7 @@ export default function Admin() {
                       </div>
                       <small>Post ID: {post.id} · Author ID: {post.userId}</small>
                       <p style={{ marginTop: '6px' }}>{post.content}</p>
-                      {post.image ? <img src={post.image} alt="post" style={{ maxWidth: '240px', marginTop: '6px' }} /> : null}
+                      {post.image ? <img src={resolveApiUrl(post.image.replace(/^\/api(?=\/)/, ''))} alt="post" style={{ maxWidth: '240px', marginTop: '6px', objectFit: 'cover' }} onError={(event) => { event.currentTarget.style.display = 'none' }} /> : null}
                       <small>Reactions: {Math.max(Number(post.likes || 0), Array.isArray(post.likedBy) ? post.likedBy.length : 0)} · Comments: {Array.isArray(post.comments) ? post.comments.length : Number(post.comments || 0)} · Shares: {Number(post.shares ?? post.reposts ?? 0)} · Visibility: {post.visibility || 'public'}</small>
                     </div>
                     <div className="admin-post-actions">

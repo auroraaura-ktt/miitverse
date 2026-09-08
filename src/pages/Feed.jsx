@@ -145,6 +145,18 @@ export default function Feed() {
   }, [])
 
   const handleAddPost = async (newPost) => {
+    // A browser File / object-URL is only valid for a live preview. It must
+    // never be serialized into local state or fed back as a permanent image
+    // reference. Only a persisted server URL (post.image) is kept.
+    const stripImageFile = (post) => {
+      if (!post || typeof post !== "object") return post
+      const { imageFile, ...rest } = post
+      if (typeof rest.image === "string" && (rest.image.startsWith("blob:") || rest.image.startsWith("object-url:"))) {
+        rest.image = null
+      }
+      return rest
+    }
+
     const storedAuth = typeof window !== 'undefined' ? window.localStorage.getItem('miitverse-auth') : null
     const parsedStoredAuth = storedAuth ? JSON.parse(storedAuth) : null
     const resolvedUsername = user?.username || parsedStoredAuth?.user?.username || parsedStoredAuth?.username || null
@@ -157,7 +169,7 @@ export default function Feed() {
 
     if (!shouldUseServerPersistence) {
       setPosts((currentPosts) => {
-        const nextPosts = [newPost, ...currentPosts]
+        const nextPosts = [stripImageFile(newPost), ...currentPosts]
         localStorage.setItem("feed-posts", JSON.stringify(nextPosts))
         return nextPosts
       })
@@ -198,7 +210,7 @@ export default function Feed() {
     } catch (error) {
       console.error('Failed to save post:', error)
       setPosts((currentPosts) => {
-        const nextPosts = [newPost, ...currentPosts]
+        const nextPosts = [stripImageFile(newPost), ...currentPosts]
         localStorage.setItem("feed-posts", JSON.stringify(nextPosts))
         return nextPosts
       })
