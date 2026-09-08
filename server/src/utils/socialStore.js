@@ -221,20 +221,8 @@ export function toggleSocialPostLike(postId, account) {
   const updated = posts.map((post) => {
     if (!post || String(post.id) !== String(postId)) return post
 
-    const likedBy = Array.isArray(post.likedBy) ? post.likedBy : []
-    const existingIndex = likedBy.findIndex((entry) => String(entry?.userId) === String(account.id))
-    const nextLikedBy = existingIndex >= 0
-      ? likedBy.filter((_, index) => index !== existingIndex)
-      : [...likedBy, { userId: String(account.id), username: account.username || 'MiitVerse member' }]
-    const legacyLikes = Math.max(Number(post.likes || 0), likedBy.length)
-    const nextPost = {
-      ...post,
-      likedBy: nextLikedBy,
-      likes: existingIndex >= 0 ? Math.max(0, legacyLikes - 1) : legacyLikes + 1,
-    }
-
-    result = { post: nextPost, reacted: existingIndex < 0 }
-    return nextPost
+    result = togglePostLikeOnPost(post, account)
+    return result.post
   })
 
   if (!result) return null
@@ -245,6 +233,24 @@ export function toggleSocialPostLike(postId, account) {
   return result
 }
 
+export function togglePostLikeOnPost(post, account) {
+  if (!post || !account?.id) return null
+
+  const likedBy = Array.isArray(post.likedBy) ? post.likedBy : []
+  const existingIndex = likedBy.findIndex((entry) => String(entry?.userId) === String(account.id))
+  const nextLikedBy = existingIndex >= 0
+    ? likedBy.filter((_, index) => index !== existingIndex)
+    : [...likedBy, { userId: String(account.id), username: account.username || 'MiitVerse member' }]
+  const legacyLikes = Math.max(Number(post.likes || 0), likedBy.length)
+  const nextPost = {
+    ...post,
+    likedBy: nextLikedBy,
+    likes: existingIndex >= 0 ? Math.max(0, legacyLikes - 1) : legacyLikes + 1,
+  }
+
+  return { post: nextPost, reacted: existingIndex < 0 }
+}
+
 export function addSocialPostComment(postId, comment) {
   if (!postId || !comment?.userId || !String(comment.content || '').trim()) return null
 
@@ -253,17 +259,7 @@ export function addSocialPostComment(postId, comment) {
   const updated = posts.map((post) => {
     if (!post || String(post.id) !== String(postId)) return post
 
-    const nextComment = {
-      id: comment.id || `comment-${Date.now()}`,
-      userId: String(comment.userId),
-      username: comment.username || 'MiitVerse member',
-      content: String(comment.content).trim().slice(0, 500),
-      createdAt: comment.createdAt || new Date().toISOString(),
-    }
-    updatedPost = {
-      ...post,
-      comments: [...(Array.isArray(post.comments) ? post.comments : []), nextComment],
-    }
+    ({ post: updatedPost } = addCommentToPost(post, comment))
     return updatedPost
   })
 
@@ -273,6 +269,24 @@ export function addSocialPostComment(postId, comment) {
     console.warn('MongoDB comment sync failed:', error.message)
   })
   return { post: updatedPost, comment: updatedPost.comments.at(-1) }
+}
+
+export function addCommentToPost(post, comment) {
+  if (!post || !comment?.userId || !String(comment.content || '').trim()) return null
+
+  const nextComment = {
+    id: comment.id || `comment-${Date.now()}`,
+    userId: String(comment.userId),
+    username: comment.username || 'MiitVerse member',
+    content: String(comment.content).trim().slice(0, 500),
+    createdAt: comment.createdAt || new Date().toISOString(),
+  }
+  const updatedPost = {
+    ...post,
+    comments: [...(Array.isArray(post.comments) ? post.comments : []), nextComment],
+  }
+
+  return { post: updatedPost, comment: nextComment }
 }
 
 export function getSocialFollows(userId) {

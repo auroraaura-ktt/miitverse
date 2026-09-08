@@ -175,22 +175,10 @@ export default function Feed() {
         formData.append('visibility', newPost.visibility || 'public')
         formData.append('image', newPost.imageFile)
 
-        const authToken = typeof window !== 'undefined' ? window.localStorage.getItem('miitverse-auth') : null
-        const parsedAuth = authToken ? JSON.parse(authToken) : null
-        const token = parsedAuth?.token
-
-        const response = await fetch('/api/social/posts', {
+        postResponse = await apiRequest('/social/posts', {
           method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           body: formData,
         })
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData?.message || 'Failed to save post')
-        }
-
-        postResponse = await response.json()
       } else {
         const payload = {
           ...newPost,

@@ -1,13 +1,23 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildInvitationLink, normalizeVerificationCode } from '../src/controllers/authController.js'
+import {
+  buildInvitationLink,
+  isVerificationCodeMatch,
+  normalizeVerificationCode,
+} from '../src/controllers/authController.js'
 import { resolveSendgridFromAddress, decideEmailFallbackRoute, getPrimaryEmailSender } from '../src/utils/emailService.js'
 
 test('normalizeVerificationCode strips spaces and non-digits before validating an 8-digit code', () => {
   assert.equal(normalizeVerificationCode(' 1234 5678 '), '12345678')
   assert.equal(normalizeVerificationCode('12-34-56-78'), '12345678')
   assert.equal(normalizeVerificationCode('12345678'), '12345678')
+})
+
+test('isVerificationCodeMatch treats formatted stored codes as the same as a clean 8-digit input', () => {
+  assert.equal(isVerificationCodeMatch('12 34 56 78', '12345678'), true)
+  assert.equal(isVerificationCodeMatch('1234-5678', '12345678'), true)
+  assert.equal(isVerificationCodeMatch('12345678', '12345679'), false)
 })
 
 test('buildInvitationLink uses the canonical MiitVerse origin and encodes the email safely', () => {

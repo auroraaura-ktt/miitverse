@@ -15,6 +15,8 @@ import {
   updateSocialPostById,
   toggleSocialPostLike,
   addSocialPostComment,
+  togglePostLikeOnPost,
+  addCommentToPost,
   getVisiblePosts,
   applyUserPostWeightedShuffle,
 } from '../utils/socialStore.js';
@@ -332,10 +334,16 @@ router.post('/posts', authMiddleware, upload.single('image'), async (req, res) =
 });
 
 router.post('/posts/:id/likes', authMiddleware, async (req, res) => {
-  const result = toggleSocialPostLike(req.params.id, {
+  const account = {
     id: req.user.id,
     username: req.user.username,
-  })
+  }
+  let result = toggleSocialPostLike(req.params.id, account)
+
+  if (!result) {
+    const [databasePost] = await listSocialPostsFromMongo({ id: String(req.params.id), includeSuspended: true })
+    result = togglePostLikeOnPost(databasePost, account)
+  }
 
   if (!result) {
     return res.status(404).json({ message: 'Post not found' })
@@ -355,11 +363,17 @@ router.post('/posts/:id/comments', authMiddleware, async (req, res) => {
   if (!content) return res.status(400).json({ message: 'Comment cannot be empty' })
   if (content.length > 500) return res.status(400).json({ message: 'Comment must be 500 characters or fewer' })
 
-  const result = addSocialPostComment(req.params.id, {
+  const comment = {
     userId: req.user.id,
     username: req.user.username,
     content,
-  })
+  }
+  let result = addSocialPostComment(req.params.id, comment)
+
+  if (!result) {
+    const [databasePost] = await listSocialPostsFromMongo({ id: String(req.params.id), includeSuspended: true })
+    result = addCommentToPost(databasePost, comment)
+  }
   if (!result) return res.status(404).json({ message: 'Post not found' })
 
   try {

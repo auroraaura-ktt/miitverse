@@ -588,6 +588,10 @@ export function normalizeVerificationCode(code) {
   return String(code ?? '').trim().replace(/\D/g, '')
 }
 
+export function isVerificationCodeMatch(storedCode, inputCode) {
+  return normalizeVerificationCode(storedCode) === normalizeVerificationCode(inputCode)
+}
+
 export async function verifyUser(req, res) {
   const { email, code } = req.body || {}
   const normalizedEmail = email?.trim().toLowerCase()
@@ -611,7 +615,7 @@ export async function verifyUser(req, res) {
       return res.status(404).json({ message: 'No verification pending' })
     }
 
-    if (String(pendingRegistration.verificationCode).trim() !== normalizedCode) {
+    if (!isVerificationCodeMatch(pendingRegistration.verificationCode, normalizedCode)) {
       return res.status(400).json({ message: 'Invalid verification code' })
     }
 

@@ -1,5 +1,24 @@
 [
   {
+    "id": "post-bb02f85f-8b36-4055-9509-7e7c7f17b1b3",
+    "userId": "36ebd4bc-1959-48c9-a882-a0bea6a44b0d",
+    "username": "Kyaw Thein Tun",
+    "source": "user",
+    "postType": "user",
+    "authorType": "user",
+    "pageName": null,
+    "profilePicture": null,
+    "content": "rrrrrrrrrrr",
+    "image": "/api/social/uploads/1788880111673-Screenshot_2026-09-08_114451.png",
+    "createdAt": "2026-09-08T15:08:31.676Z",
+    "likes": 0,
+    "likedBy": [],
+    "comments": [],
+    "reposts": 0,
+    "shares": 0,
+    "visibility": "public"
+  },
+  {
     "id": 1788871729886,
     "userId": "36ebd4bc-1959-48c9-a882-a0bea6a44b0d",
     "username": "Kyaw Thein Tun",

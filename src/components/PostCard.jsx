@@ -2,6 +2,7 @@ import "./PostCard.css";
 import { useState, useEffect } from "react";
 import ReactionModal from "./ReactionModal";
 import VerifiedBadge from "./VerifiedBadge";
+import { resolveApiUrl } from "../lib/api";
 import { useAuth } from "../context/useAuth";
 import { useVerifiedAuthors } from "../lib/useVerifiedAuthors";
 import { apiRequest } from "../lib/api";
@@ -140,6 +141,7 @@ export default function PostCard({ post = {}, onPostUpdated }) {
   // Page posts carry their full page name; fall back to the regular username.
   const authorLabel = pageName || username;
   const displayName = typeof authorLabel === "string" && authorLabel.trim() ? authorLabel.trim() : "User";
+  const imageSrc = image ? resolveApiUrl(image.replace(/^\/api(?=\/)/, "")) : null;
 
   const initials = displayName
     .split(" ")
@@ -244,7 +246,7 @@ export default function PostCard({ post = {}, onPostUpdated }) {
 
         {image && (
           <img
-            src={image}
+            src={imageSrc}
             alt="post"
             style={{
               width: "100%",
@@ -253,7 +255,12 @@ export default function PostCard({ post = {}, onPostUpdated }) {
               display: "block",
             }}
             onError={(event) => {
-              event.target.style.display = "none";
+              if (!event.currentTarget.dataset.fallbackTried) {
+                event.currentTarget.dataset.fallbackTried = "true";
+                event.currentTarget.src = image;
+                return;
+              }
+              event.currentTarget.style.display = "none";
             }}
           />
         )}
