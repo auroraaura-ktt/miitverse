@@ -52,8 +52,13 @@ test('buildInvitationLink prefers the Vercel production host over stale Render d
   const originalClientOrigin = process.env.CLIENT_ORIGIN
 
   process.env.RENDER_EXTERNAL_URL = 'https://miitverse.onrender.com'
+<<<<<<< HEAD
   process.env.VERCEL_URL = 'vercel.com'
   process.env.CLIENT_ORIGIN = 'https://miitverse.onrender.com'
+=======
+  process.env.VERCEL_URL = 'miitverse-xi.vercel.app'
+  process.env.CLIENT_ORIGIN = 'https://miitverse-xi.vercel.app'
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
 
   try {
     assert.equal(
@@ -70,6 +75,7 @@ test('buildInvitationLink prefers the Vercel production host over stale Render d
     if (originalClientOrigin === undefined) delete process.env.CLIENT_ORIGIN
     else process.env.CLIENT_ORIGIN = originalClientOrigin
   }
+<<<<<<< HEAD
 })
 
 test('buildInvitationLink uses the gdt-vercel app origin from the admin request', () => {
@@ -96,6 +102,8 @@ test('buildInvitationLink uses the gdt-vercel app origin from the admin request'
     if (originalClientOrigin === undefined) delete process.env.CLIENT_ORIGIN
     else process.env.CLIENT_ORIGIN = originalClientOrigin
   }
+=======
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
 })
 
 test('resolveSendgridFromAddress avoids personal mailbox senders that hurt delivery', () => {

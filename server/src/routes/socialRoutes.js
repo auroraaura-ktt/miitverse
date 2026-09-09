@@ -88,7 +88,11 @@ async function enrichPostAuthors(posts = []) {
   }))
 }
 
+<<<<<<< HEAD
 router.post('/uploads', authMiddleware, upload.single('image'), async (req, res) => {
+=======
+router.post('/uploads', authMiddleware, upload.single('image'), (req, res) => {
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
   const file = req.file;
   if (!file) {
     return res.status(400).json({ message: 'No image file provided' });
@@ -108,6 +112,33 @@ router.post('/uploads', authMiddleware, upload.single('image'), async (req, res)
 
 router.get('/uploads/:fileName', async (req, res) => {
   await serveImageFromStorage(req, res);
+});
+
+router.get('/verified-authors', authMiddleware, async (req, res) => {
+  try {
+    const ids = await listVerifiedUserIds();
+    // Page accounts carry their own blue mark on the page record (not the user
+    // record), so merge verified page ids in as well. Every post card resolves
+    // the badge against this set, so the change applies immediately to old,
+    // current, and future posts without touching any post.
+    try {
+      const pages = await listPageRecords();
+      for (const page of pages || []) {
+        if (!page || page.verified === false) continue;
+        for (const key of [page.ownerId, page.id]) {
+          if (key !== undefined && key !== null && key !== '') {
+            ids.add(String(key));
+          }
+        }
+      }
+    } catch (pageError) {
+      console.warn('Failed to resolve verified page accounts:', pageError.message);
+    }
+    return res.json({ verifiedAuthorIds: [...ids] });
+  } catch (error) {
+    console.error('Failed to load verified accounts:', error.message);
+    return res.status(500).json({ message: 'Failed to load verified accounts' });
+  }
 });
 
 router.get('/verified-authors', authMiddleware, async (req, res) => {
@@ -295,8 +326,11 @@ router.post('/posts', authMiddleware, upload.single('image'), async (req, res) =
     }
   }
 
+<<<<<<< HEAD
   console.log('[POST /api/social/posts] stored image URL:', resolvedImageUrl)
 
+=======
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
   if (!content.trim() && !resolvedImageUrl) {
     return res.status(400).json({ message: 'Post content or an image is required' });
   }

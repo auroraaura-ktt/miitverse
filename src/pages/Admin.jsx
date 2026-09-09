@@ -56,7 +56,10 @@ export default function Admin() {
 
   const [feedbackRows, setFeedbackRows] = useState([])
   const [loadingFeedback, setLoadingFeedback] = useState(false)
+<<<<<<< HEAD
   const [feedbackError, setFeedbackError] = useState('')
+=======
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
 
   const [inviteEmails, setInviteEmails] = useState('')
   const [inviteMessage, setInviteMessage] = useState({ type: '', text: '' })
@@ -169,14 +172,23 @@ export default function Admin() {
 
   const loadFeedback = useCallback(async () => {
     setLoadingFeedback(true)
+<<<<<<< HEAD
     setFeedbackError('')
+=======
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
     try {
       const data = await apiRequest('/feedback', {
         headers: { Authorization: `Bearer ${token}` },
       })
+<<<<<<< HEAD
       setFeedbackRows(Array.isArray(data.feedback) ? data.feedback : [])
     } catch (err) {
       setFeedbackError(err.message || 'Failed to load feedback')
+=======
+      setFeedbackRows(data.feedback || [])
+    } catch (err) {
+      setError(err.message || 'Failed to load feedback')
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
       setFeedbackRows([])
     } finally {
       setLoadingFeedback(false)
@@ -1362,9 +1374,14 @@ export default function Admin() {
             </div>
 
             <div className="admin-users-table-wrap admin-report-table-wrap">
+<<<<<<< HEAD
               {feedbackError && <p className="error-text">{feedbackError}</p>}
               {loadingFeedback && <LoadingState label="Loading feedback" compact />}
               {!loadingFeedback && feedbackRows.length === 0 && !feedbackError && <p>No user feedback has been submitted yet.</p>}
+=======
+              {loadingFeedback && <LoadingState label="Loading feedback" compact />}
+              {!loadingFeedback && feedbackRows.length === 0 && <p>No user feedback has been submitted yet.</p>}
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
               {!loadingFeedback && feedbackRows.length > 0 && (
               <table className="admin-users-table admin-reports-table">
                 <thead>

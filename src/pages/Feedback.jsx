@@ -52,9 +52,13 @@ export default function Feedback() {
     } catch (error) {
       setStatus({
         type: 'error',
+<<<<<<< HEAD
         text: error.status === 401
           ? 'Please log in before submitting feedback.'
           : error.message || 'Something went wrong. Please try again.',
+=======
+        text: error.message || 'Something went wrong. Please try again.',
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
       })
     } finally {
       setSubmitting(false)
@@ -80,9 +84,12 @@ export default function Feedback() {
             <div>
               <h3>MiitVerse</h3>
               <p>Official Social Hub of MIIT</p>
+<<<<<<< HEAD
               {user?.username || user?.email ? (
                 <p>Submitting as {user.username || user.email}</p>
               ) : null}
+=======
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
             </div>
           </div>
 
@@ -145,4 +152,8 @@ export default function Feedback() {
       <Footer />
     </div>
   )
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
