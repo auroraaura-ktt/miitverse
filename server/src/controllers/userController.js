@@ -1,7 +1,3 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
 import { driver } from '../config/neo4j.js'
 import bcrypt from 'bcryptjs'
 import {
@@ -11,11 +7,7 @@ import {
   setUserSuspensionInMongo,
   setUserVerifiedInMongo,
 } from '../utils/userPersistence.js'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
-const profileUploadDir = resolve(__dirname, '..', '..', 'data', 'uploads')
+import { storeImage } from '../utils/imageStore.js'
 
 function getUserProperties(node) {
   return node?.properties ?? node ?? {}
@@ -37,6 +29,7 @@ export async function getCurrentUser(req, res) {
           role: mongoUser.role,
           createdAt: mongoUser.createdAt,
           avatarUrl: mongoUser.avatarUrl || '',
+          verified: Boolean(mongoUser.verified),
         },
       })
     }
@@ -74,6 +67,7 @@ export async function getCurrentUser(req, res) {
         role: user.role,
         createdAt: user.createdAt,
         avatarUrl: user.avatarUrl || '',
+        verified: Boolean(user.verified),
       },
     })
   } finally {
@@ -163,8 +157,6 @@ export async function updateCurrentAvatar(req, res) {
   }
 
   try {
-    mkdirSync(profileUploadDir, { recursive: true })
-
     const extensionMap = {
       'image/jpeg': 'jpg',
       'image/png': 'png',
@@ -174,9 +166,8 @@ export async function updateCurrentAvatar(req, res) {
 
     const extension = extensionMap[req.file.mimetype] || 'jpg'
     const fileName = `avatar-${req.user.id}-${Date.now()}.${extension}`
-    const filePath = resolve(profileUploadDir, fileName)
 
-    writeFileSync(filePath, req.file.buffer)
+    await storeImage(req.file.buffer, fileName, req.file.mimetype)
 
     const avatarUrl = `/api/social/uploads/${fileName}`
     const mongoUser = await getUserFromMongo(req.user.id)
@@ -293,7 +284,7 @@ export async function listUsers(req, res, deps = {}) {
           email: user.email,
           role: user.role,
           suspended: Boolean(user.suspended),
-          verified: user.verified !== undefined ? Boolean(user.verified) : true,
+          verified: user.verified !== undefined ? Boolean(user.verified) : false,
           createdAt: user.createdAt,
         }
       }),

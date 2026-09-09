@@ -2,7 +2,9 @@ import "./PostCard.css";
 import { useState, useEffect } from "react";
 import ReactionModal from "./ReactionModal";
 import VerifiedBadge from "./VerifiedBadge";
+import { resolveApiUrl } from "../lib/api";
 import { useAuth } from "../context/useAuth";
+import { useVerifiedAuthors } from "../lib/useVerifiedAuthors";
 import { apiRequest } from "../lib/api";
 
 function formatTimestamp(value) {
@@ -19,6 +21,9 @@ function formatTimestamp(value) {
 }
 
 export default function PostCard({ post = {}, onPostUpdated }) {
+  const { user } = useAuth();
+  const verifiedAuthors = useVerifiedAuthors();
+
   const {
     id = "default",
     username = post.author || post.username || "",
@@ -30,22 +35,35 @@ export default function PostCard({ post = {}, onPostUpdated }) {
     likes = 0,
     comments = [],
     reposts = 0,
+    shares = reposts,
     likedBy = [],
-    verified = true,
   } = post;
 
-  const { user } = useAuth();
+  // Verification belongs to the account, never to the post. The badge is
+  // derived exclusively from the author's CURRENT account state (the live
+  // verified-accounts set, which the server resolves at read time) so admin
+  // enable/disable changes apply immediately to old, current, and future
+  // posts without editing or recreating any post.
+  const postUserId = post.userId ?? post.authorId ?? post.ownerId ?? null;
+  const ownAccountVerified = String(postUserId ?? '') === String(user?.id ?? '') && Boolean(user?.verified);
+  const authorIsVerified = !!postUserId && !!verifiedAuthors && verifiedAuthors.has(String(postUserId));
+  const isVerified = Boolean(
+    ownAccountVerified ||
+    authorIsVerified
+  );
 
   const initialCommentCount = Array.isArray(comments) ? comments.length : Number(comments || 0);
 
   const initialLikers = Array.isArray(likedBy) ? likedBy : [];
   const [reactions, setReactions] = useState({
+    postId: id,
     likes: Number(likes || 0),
     comments: initialCommentCount,
-    shares: Number(reposts || 0),
+    shares: Number(shares ?? reposts ?? 0),
     liked: initialLikers.some((entry) => String(entry?.userId) === String(user?.id)),
     likers: initialLikers,
   });
+  const [postComments, setPostComments] = useState(Array.isArray(comments) ? comments : []);
   const [liking, setLiking] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [reported, setReported] = useState(false);
@@ -58,11 +76,12 @@ export default function PostCard({ post = {}, onPostUpdated }) {
       ...current,
       likes: Number(likes || 0),
       comments: initialCommentCount,
-      shares: Number(reposts || 0),
+      shares: Number(shares ?? reposts ?? 0),
       liked: nextLikers.some((entry) => String(entry?.userId) === String(user?.id)),
       likers: nextLikers,
     }));
-  }, [id, likes, initialCommentCount, reposts, user?.id, likedBy]);
+    setPostComments(Array.isArray(comments) ? comments : []);
+  }, [id, likes, initialCommentCount, reposts, shares, user?.id, likedBy, comments]);
 
   const handleLike = async () => {
     if (liking || !user?.id) return;
@@ -87,10 +106,14 @@ export default function PostCard({ post = {}, onPostUpdated }) {
   };
 
   const handleComment = () => {
-    setReactions((prev) => ({
-      ...prev,
-      comments: prev.comments + 1,
-    }));
+    setShowReactionModal(true);
+  };
+
+  const handleCommentAdded = (nextPost) => {
+    const nextComments = Array.isArray(nextPost?.comments) ? nextPost.comments : [];
+    setPostComments(nextComments);
+    setReactions((current) => ({ ...current, comments: nextComments.length }));
+    onPostUpdated?.(nextPost);
   };
 
   const handleReport = async () => {
@@ -118,6 +141,7 @@ export default function PostCard({ post = {}, onPostUpdated }) {
   // Page posts carry their full page name; fall back to the regular username.
   const authorLabel = pageName || username;
   const displayName = typeof authorLabel === "string" && authorLabel.trim() ? authorLabel.trim() : "User";
+  const imageSrc = image ? resolveApiUrl(image.replace(/^\/api(?=\/)/, "")) : null;
 
   const initials = displayName
     .split(" ")
@@ -134,6 +158,8 @@ export default function PostCard({ post = {}, onPostUpdated }) {
         post={post}
         reactions={reactions}
         likers={reactions.likers}
+        comments={postComments}
+        onCommentAdded={handleCommentAdded}
       />
 
       <div className="post-card">
@@ -196,7 +222,7 @@ export default function PostCard({ post = {}, onPostUpdated }) {
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <span className="post-card-author" style={{ fontWeight: "600" }}>{displayName}</span>
-                {verified && <VerifiedBadge size="small" />}
+                {isVerified && <VerifiedBadge size="small" />}
               </div>
               <div className="post-card-time">{formatTimestamp(createdAt)}</div>
             </div>
@@ -220,7 +246,7 @@ export default function PostCard({ post = {}, onPostUpdated }) {
 
         {image && (
           <img
-            src={image}
+            src={imageSrc}
             alt="post"
             style={{
               width: "100%",
@@ -229,7 +255,12 @@ export default function PostCard({ post = {}, onPostUpdated }) {
               display: "block",
             }}
             onError={(event) => {
-              event.target.style.display = "none";
+              if (!event.currentTarget.dataset.fallbackTried) {
+                event.currentTarget.dataset.fallbackTried = "true";
+                event.currentTarget.src = image;
+                return;
+              }
+              event.currentTarget.style.display = "none";
             }}
           />
         )}
@@ -346,43 +377,17 @@ export default function PostCard({ post = {}, onPostUpdated }) {
         </div>
 
         <div className="post-engagement" style={{ padding: "12px 16px" }}>
-          <div
-            className="post-card-engagement-count"
-            style={{
-              fontWeight: "600",
-              marginBottom: "8px",
-              fontSize: "14px",
-              cursor: "pointer",
-              color: "#F5B62D",
-            }}
-            onClick={handleReactionCountClick}
-          >
-            {reactions.liked ? "You and " : ""}{reactions.likes - (reactions.liked ? 1 : 0)} {reactions.likes - (reactions.liked ? 1 : 0) === 1 ? "other person" : "others"} liked this
-          </div>
-
           <p
             className="post-card-body"
             style={{
               lineHeight: "1.5",
               fontSize: "14px",
-              marginBottom: "8px",
+              marginBottom: "0",
             }}
           >
-            <strong>{displayName}</strong> {verified && <VerifiedBadge size="small" />} {content.substring(0, 80)}
+            <strong>{displayName}</strong> {isVerified && <VerifiedBadge size="small" />} {content.substring(0, 80)}
             {content.length > 80 ? "..." : ""}
           </p>
-
-          <div
-            className="post-card-comments-link"
-            style={{
-              fontSize: "12px",
-              cursor: "pointer",
-              fontWeight: "600",
-            }}
-            onClick={handleReactionCountClick}
-          >
-            View all {reactions.comments} comments
-          </div>
         </div>
       </div>
     </>

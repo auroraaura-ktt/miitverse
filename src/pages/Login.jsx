@@ -61,7 +61,7 @@ export default function Login() {
             navigate(`/page/${encodeURIComponent(pageData.page.slug)}`, { replace: true })
             return
           }
-        } catch (e) {
+        } catch {
           // fallback to inferred slug
         }
 

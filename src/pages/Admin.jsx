@@ -1,7 +1,10 @@
 ﻿import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../context/useAuth'
-import { apiRequest } from '../lib/api'
+import { apiRequest, resolveApiUrl } from '../lib/api'
+import { invalidateVerifiedAuthorsCache } from '../lib/useVerifiedAuthors'
 import LoadingState from '../components/LoadingState'
+import VerifiedBadge from '../components/VerifiedBadge'
+import { FaStar } from 'react-icons/fa'
 import './Admin.css'
 
 export default function Admin() {
@@ -51,6 +54,10 @@ export default function Admin() {
   const [loadingReports, setLoadingReports] = useState(false)
   const [expandedReportId, setExpandedReportId] = useState(null)
 
+  const [feedbackRows, setFeedbackRows] = useState([])
+  const [loadingFeedback, setLoadingFeedback] = useState(false)
+  const [feedbackError, setFeedbackError] = useState('')
+
   const [inviteEmails, setInviteEmails] = useState('')
   const [inviteMessage, setInviteMessage] = useState({ type: '', text: '' })
   const [inviteResults, setInviteResults] = useState(null)
@@ -76,6 +83,7 @@ export default function Admin() {
 
   const [usersTab, setUsersTab] = useState('regular') // regular | admin
   const [updatingVerified, setUpdatingVerified] = useState(false)
+  const [verifyingUserId, setVerifyingUserId] = useState(null)
   const [updatingPageVerified, setUpdatingPageVerified] = useState(null)
   const [selectedPage, setSelectedPage] = useState(null)
 
@@ -156,6 +164,34 @@ export default function Admin() {
       setExpandedReportId(null)
     } catch (err) {
       setError(err.message || 'Failed to delete report')
+    }
+  }
+
+  const loadFeedback = useCallback(async () => {
+    setLoadingFeedback(true)
+    setFeedbackError('')
+    try {
+      const data = await apiRequest('/feedback', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setFeedbackRows(Array.isArray(data.feedback) ? data.feedback : [])
+    } catch (err) {
+      setFeedbackError(err.message || 'Failed to load feedback')
+      setFeedbackRows([])
+    } finally {
+      setLoadingFeedback(false)
+    }
+  }, [token])
+
+  const handleDeleteFeedback = async (feedbackId) => {
+    try {
+      await apiRequest(`/feedback/${encodeURIComponent(feedbackId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setFeedbackRows((currentRows) => currentRows.filter((item) => item.id !== feedbackId))
+    } catch (err) {
+      setError(err.message || 'Failed to delete feedback')
     }
   }
 
@@ -458,11 +494,37 @@ export default function Admin() {
       const updatedUser = { ...selectedUser, ...data.user }
       setSelectedUser(updatedUser)
       setUsers((currentUsers) => currentUsers.map((item) => item.id === updatedUser.id ? { ...item, ...updatedUser } : item))
+      invalidateVerifiedAuthorsCache()
       setUserActionMessage({ type: 'success', text: data.message })
     } catch (err) {
       setUserActionMessage({ type: 'error', text: err.message || 'Failed to update blue mark status' })
     } finally {
       setUpdatingVerified(false)
+    }
+  }
+
+  // Toggle verification directly from the Manage Users list (Admin only).
+  const handleListToggleVerified = async (targetUser) => {
+    if (!targetUser?.id) return
+    const nextVerified = !targetUser.verified
+    setVerifyingUserId(targetUser.id)
+    setError(null)
+    try {
+      const data = await apiRequest(`/users/${encodeURIComponent(targetUser.id)}/verified`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ verified: nextVerified }),
+      })
+      const updatedUser = { ...targetUser, ...data.user }
+      setUsers((currentUsers) => currentUsers.map((item) => item.id === updatedUser.id ? { ...item, ...updatedUser } : item))
+      invalidateVerifiedAuthorsCache()
+      if (selectedUser?.id === updatedUser.id) {
+        setSelectedUser(updatedUser)
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to update blue mark status')
+    } finally {
+      setVerifyingUserId(null)
     }
   }
 
@@ -481,6 +543,10 @@ export default function Admin() {
       if (selectedPage?.id === updatedPage.id) {
         setSelectedPage(updatedPage)
       }
+      // Republish the shared verified-accounts set so every open Feed (this
+      // tab and other tabs) re-resolves the blue mark immediately for all of
+      // the page's past, current, and future posts.
+      invalidateVerifiedAuthorsCache()
       setPageAccountMessage({ type: 'success', text: data.message })
     } catch (err) {
       setPageAccountMessage({ type: 'error', text: err.message || 'Failed to update page blue mark' })
@@ -539,23 +605,14 @@ export default function Admin() {
         headers: { Authorization: `Bearer ${token}` },
       })
 
-      const fetchedPages = await (async () => {
-        try {
-          const pagesData = await apiRequest('/auth/pages', { headers: { Authorization: `Bearer ${token}` } })
-          return pagesData.pages || []
-        } catch (e) {
-          return pages || []
-        }
-      })()
-
       const posts = (data.posts || []).map((p) => {
-        const matchedPage = (fetchedPages || []).find((pg) => pg.id === p.userId)
-        const isPage = Boolean(matchedPage)
+        const authorType = p.authorType || (p.source === 'page' || p.postType === 'page' ? 'page' : 'user')
         return {
           ...p,
-          source: isPage ? 'page' : 'user',
+          source: authorType,
+          authorType,
           author: p.username || p.author || 'User',
-          pageName: matchedPage?.pageName || null,
+          pageName: p.pageName || null,
         }
       })
 
@@ -621,13 +678,17 @@ export default function Admin() {
     if (activeSection === 'reports') {
       loadReports()
     }
+    if (activeSection === 'feedback') {
+      loadFeedback()
+    }
     if (activeSection === 'dashboard') {
       loadUsers()
       loadPages({ reportError: false })
       loadAllPosts()
       loadReports()
+      loadFeedback()
     }
-  }, [activeSection, loadUsers, loadPages, loadInviteHistory, loadReports])
+  }, [activeSection, loadUsers, loadPages, loadInviteHistory, loadReports, loadFeedback])
 
   const sidebarItems = [
     { key: 'dashboard', label: '📊 Dashboard' },
@@ -636,6 +697,7 @@ export default function Admin() {
     { key: 'posts', label: '📝 Posts' },
     { key: 'invitations', label: '✉ Invitations' },
     { key: 'reports', label: '🚩 Reports' },
+    { key: 'feedback', label: '⭐ Feedback' },
   ]
 
   const pageTitles = {
@@ -645,6 +707,7 @@ export default function Admin() {
     posts: 'Posts',
     invitations: 'Invitations',
     reports: 'Reports',
+    feedback: 'User Feedback',
     'user-details': 'User Details',
     'page-details': 'Page Account Details',
   }
@@ -656,6 +719,7 @@ export default function Admin() {
     posts: 'Manage posts and content moderation.',
     invitations: 'Invite users via email and send a registration link.',
     reports: 'Review flagged reports and moderation tasks.',
+    feedback: 'Review star ratings and feedback submitted by users.',
     'user-details': 'Review account information and complete management actions.',
     'page-details': 'Manage this page account, its blue mark and dashboard access.',
   }
@@ -670,6 +734,7 @@ export default function Admin() {
     { label: 'Pages', value: pages.length, color: 'gold' },
     { label: 'Posts', value: postsList.length, color: 'green' },
     { label: 'Reports', value: reportRows.length, color: 'red' },
+    { label: 'Feedback', value: feedbackRows.length, color: 'purple' },
   ]
   const dashboardChartMax = Math.max(...dashboardMetrics.map((metric) => metric.value), 1)
   const dashboardChartPoints = dashboardMetrics
@@ -731,13 +796,36 @@ export default function Admin() {
                         <tbody>
                           {regularUsers.map((userItem) => (
                             <tr key={userItem.id}>
-                              <td>{userItem.fullName || userItem.username}</td>
+                              <td>
+                                <span className="admin-name-cell">
+                                  {userItem.fullName || userItem.username}
+                                  {userItem.verified && <VerifiedBadge size="small" />}
+                                </span>
+                              </td>
                               <td>{userItem.email}</td>
                               <td>{userItem.role}</td>
                               <td>
-                                {userItem.verified
-                                  ? <span className="admin-verified-badge" title="Blue mark enabled">✔ Verified</span>
-                                  : <span className="admin-unverified-badge" title="Blue mark disabled">— None</span>}
+                                <div className="admin-verify-cell">
+                                  {userItem.verified
+                                    ? <span className="admin-verified-badge" title="Blue mark enabled">✔ Verified</span>
+                                    : <span className="admin-unverified-badge" title="Blue mark disabled">Not Verified</span>}
+                                  <button
+                                    type="button"
+                                    className={`admin-verify-toggle-btn ${userItem.verified ? 'enabled' : ''}`}
+                                    disabled={verifyingUserId === userItem.id}
+                                    title={userItem.verified ? 'Remove Verification' : 'Mark as Verified'}
+                                    onClick={() => handleListToggleVerified(userItem)}
+                                  >
+                                    {verifyingUserId === userItem.id
+                                      ? <span className="button-spinner" aria-hidden="true" />
+                                      : null}
+                                    {verifyingUserId === userItem.id
+                                      ? 'Updating…'
+                                      : userItem.verified
+                                        ? 'Remove Verification'
+                                        : 'Mark as Verified'}
+                                  </button>
+                                </div>
                               </td>
                               <td>
                                 <span className={`admin-status-badge ${userItem.suspended ? 'suspended' : 'active'}`}>
@@ -813,7 +901,7 @@ export default function Admin() {
               <div className="admin-user-avatar">{initials}</div>
               <div className="admin-user-profile-copy">
                 <p className="admin-eyebrow">ACCOUNT PROFILE</p>
-                <h2>{displayName}</h2>
+                <h2>{displayName} {selectedUser.verified && <VerifiedBadge size="small" />}</h2>
                 <p>{selectedUser.email}</p>
                 <div className="admin-user-badges"><span className="admin-role-badge">{selectedUser.role || 'user'}</span><span className={`admin-status-badge ${selectedUser.suspended ? 'suspended' : 'active'}`}>{selectedUser.suspended ? 'Suspended' : 'Active'}</span>{selectedUser.verified && <span className="admin-verified-badge">✔ Blue Mark</span>}</div>
               </div>
@@ -872,7 +960,7 @@ export default function Admin() {
               <div className="admin-user-avatar">{pageInitials}</div>
               <div className="admin-user-profile-copy">
                 <p className="admin-eyebrow">PAGE ACCOUNT PROFILE</p>
-                <h2>{pageDisplayName} {selectedPage.verified === false ? <span className="admin-unverified-badge">— No Blue Mark</span> : <span className="admin-verified-badge">✔ Blue Mark</span>}</h2>
+                <h2>{pageDisplayName} {selectedPage.verified && <VerifiedBadge size="small" />} {selectedPage.verified === false ? <span className="admin-unverified-badge">Not Verified</span> : <span className="admin-verified-badge">✔ Blue Mark</span>}</h2>
                 <p>{selectedPage.email}</p>
                 <div className="admin-user-badges"><span className="admin-role-badge">{selectedPage.role || 'page'}</span></div>
               </div>
@@ -984,11 +1072,25 @@ export default function Admin() {
                   {pages.map((pageItem) => (
                     <div className="admin-page-card" key={pageItem.id}>
                       <div>
-                        <h4>{pageItem.pageName} {pageItem.verified === false ? <span className="admin-unverified-badge" title="Blue mark disabled">— No Blue Mark</span> : <span className="admin-verified-badge" title="Blue mark enabled">✔ Blue Mark</span>}</h4>
+                        <h4><span className="admin-name-cell">{pageItem.pageName} {pageItem.verified && <VerifiedBadge size="small" />}</span> {pageItem.verified === false ? <span className="admin-unverified-badge" title="Blue mark disabled">Not Verified</span> : <span className="admin-verified-badge" title="Blue mark enabled">✔ Blue Mark</span>}</h4>
                         <p>{pageItem.email}</p>
                       </div>
                       <div className="admin-page-card-actions">
                         <span className="admin-page-badge">{pageItem.role || 'page'}</span>
+                        <button
+                          type="button"
+                          className={`admin-verify-toggle-btn ${pageItem.verified === false ? '' : 'enabled'}`}
+                          disabled={updatingPageVerified === pageItem.id}
+                          title={pageItem.verified === false ? 'Mark as Verified' : 'Remove Verification'}
+                          onClick={() => handleTogglePageVerified(pageItem)}
+                        >
+                          {updatingPageVerified === pageItem.id && <span className="button-spinner" aria-hidden="true" />}
+                          {updatingPageVerified === pageItem.id
+                            ? 'Updating…'
+                            : pageItem.verified === false
+                              ? 'Mark as Verified'
+                              : 'Remove Verification'}
+                        </button>
                         <button
                           type="button"
                           className="admin-more-actions-btn"
@@ -1043,11 +1145,13 @@ export default function Admin() {
                   <div key={post.id} className="admin-post-row">
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <strong>{post.source === 'page' ? `${post.pageName} (page)` : post.author}</strong>
+                        <strong>{post.source === 'page' ? (post.pageName || post.author) : post.author} <small>({post.authorType === 'page' ? 'Page' : 'User'})</small></strong>
                         <small>{post.createdAt ? new Date(post.createdAt).toLocaleString() : ''}</small>
                       </div>
+                      <small>Post ID: {post.id} · Author ID: {post.userId}</small>
                       <p style={{ marginTop: '6px' }}>{post.content}</p>
-                      {post.image ? <img src={post.image} alt="post" style={{ maxWidth: '240px', marginTop: '6px' }} /> : null}
+                      {post.image ? <img src={resolveApiUrl(post.image.replace(/^\/api(?=\/)/, ''))} alt="post" style={{ maxWidth: '240px', marginTop: '6px', objectFit: 'cover' }} onError={(event) => { event.currentTarget.style.display = 'none' }} /> : null}
+                      <small>Reactions: {Math.max(Number(post.likes || 0), Array.isArray(post.likedBy) ? post.likedBy.length : 0)} · Comments: {Array.isArray(post.comments) ? post.comments.length : Number(post.comments || 0)} · Shares: {Number(post.shares ?? post.reposts ?? 0)} · Visibility: {post.visibility || 'public'}</small>
                     </div>
                     <div className="admin-post-actions">
                       <button type="button" className="admin-delete-btn" onClick={() => handleDeletePost(post)}>Delete</button>
@@ -1071,8 +1175,10 @@ export default function Admin() {
             </div>
 
             <div className="admin-invite-link">
-              <strong>Invitation Link:</strong>
+              <strong>Invitation links:</strong>
               <a href="https://miitverse-xi.vercel.app/register" target="_blank" rel="noreferrer">https://miitverse-xi.vercel.app</a>
+              <span aria-hidden="true">·</span>
+              <a href="https://gdt-vercel.vercel.app/register" target="_blank" rel="noreferrer">https://gdt-vercel.vercel.app</a>
             </div>
 
             {inviteMessage.text && (
@@ -1247,6 +1353,63 @@ export default function Admin() {
             </div>
           </section>
         )
+      case 'feedback':
+        return (
+          <section className="admin-page-accounts">
+            <div className="admin-create-header">
+              <h2>{pageTitles[activeSection]}</h2>
+              <p>{pageDescriptions[activeSection]}</p>
+            </div>
+
+            <div className="admin-users-table-wrap admin-report-table-wrap">
+              {feedbackError && <p className="error-text">{feedbackError}</p>}
+              {loadingFeedback && <LoadingState label="Loading feedback" compact />}
+              {!loadingFeedback && feedbackRows.length === 0 && !feedbackError && <p>No user feedback has been submitted yet.</p>}
+              {!loadingFeedback && feedbackRows.length > 0 && (
+              <table className="admin-users-table admin-reports-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Rating</th>
+                    <th>Feedback</th>
+                    <th>Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {feedbackRows.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.username}</td>
+                      <td>
+                        <span className="admin-feedback-stars">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <FaStar
+                              key={star}
+                              className={star <= item.rating ? 'filled' : ''}
+                            />
+                          ))}
+                          <span className="admin-feedback-rating-num">{item.rating}/5</span>
+                        </span>
+                      </td>
+                      <td className="admin-feedback-message">{item.message}</td>
+                      <td>{new Date(item.createdAt || Date.now()).toLocaleString()}</td>
+                      <td className="admin-report-action-cell">
+                        <button
+                          type="button"
+                          className="admin-delete-btn"
+                          onClick={() => handleDeleteFeedback(item.id)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              )}
+            </div>
+          </section>
+        )
       default:
         return (
           <>
@@ -1274,6 +1437,12 @@ export default function Admin() {
                 <h2>{reportRows.length}</h2>
                 <p>{reportRows.filter((r) => r.status !== 'Resolved').length} need review</p>
               </div>
+
+              <div className="stat-card">
+                <h3>⭐ Feedback</h3>
+                <h2>{feedbackRows.length}</h2>
+                <p>Star ratings &amp; reviews</p>
+              </div>
             </section>
 
             <section className="dashboard-quick-actions">
@@ -1282,6 +1451,7 @@ export default function Admin() {
               <button type="button" onClick={() => goToSection('posts')}>📝 Posts</button>
               <button type="button" onClick={() => goToSection('invitations')}>✉ Send Invitations</button>
               <button type="button" onClick={() => goToSection('reports')}>🚩 Reports</button>
+              <button type="button" onClick={() => goToSection('feedback')}>⭐ View Feedback</button>
             </section>
 
             <section className="admin-insights" aria-label="Dashboard summary">
@@ -1301,6 +1471,7 @@ export default function Admin() {
                 <div><span>Needs attention</span><strong>{reportRows.filter((report) => report.status !== 'Resolved').length} reports</strong></div>
                 <div><span>Published content</span><strong>{postsList.length} posts</strong></div>
                 <div><span>Verified pages</span><strong>{pages.filter((page) => page.verified).length} pages</strong></div>
+                <div><span>Feedback</span><strong>{feedbackRows.length} reviews</strong></div>
               </div>
 
               <div className="admin-chart-grid">

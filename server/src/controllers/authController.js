@@ -11,6 +11,7 @@ import { createPageRecord, getPageRecordByOwner as getPageRecordByOwnerFromPersi
 import { persistUserToBothDatabases, getUserFromMongo, isNeo4jUnavailableError } from '../utils/userPersistence.js'
 import { buildPageAccountPayload } from '../utils/authAccountHelpers.js'
 import { pendingRegistrationStore } from '../utils/pendingRegistrations.js'
+import { getCanonicalClientOrigin } from '../utils/clientOrigins.js'
 
 const verificationTtlMs = 15 * 60 * 1000
 const verificationResendCooldownMs = 3 * 60 * 1000
@@ -59,30 +60,15 @@ function sendVerificationEmailInBackground(email, code, pendingRegistration) {
     })
 }
 
-function getCanonicalClientOrigin() {
-  const rawOrigin = (env.clientOrigin || 'https://miitverse-xi.vercel.app').trim()
-  const cleanedOrigin = rawOrigin.replace(/\/+$/g, '')
-
-  if (!cleanedOrigin) {
-    return 'https://miitverse-xi.vercel.app'
-  }
-
-  if (/^https?:\/\//i.test(cleanedOrigin)) {
-    return cleanedOrigin
-  }
-
-  return `https://${cleanedOrigin}`
-}
-
-export function buildInvitationLink(email) {
-  const cleanOrigin = getCanonicalClientOrigin().replace(/\/+$/g, '')
+export function buildInvitationLink(email, req) {
+  const cleanOrigin = getCanonicalClientOrigin(req).replace(/\/+$/g, '')
   const encodedEmail = encodeURIComponent(String(email ?? '').trim())
   return `${cleanOrigin}/register?email=${encodedEmail}`
 }
 
-async function sendInvitationEmail(toEmail) {
-  const invitationLink = buildInvitationLink(toEmail)
-  const assetOrigin = getCanonicalClientOrigin()
+async function sendInvitationEmail(toEmail, req) {
+  const invitationLink = buildInvitationLink(toEmail, req)
+  const assetOrigin = getCanonicalClientOrigin(req)
   const html = `
     <div style="margin:0; padding:0; background:#eef1f8;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background:#eef1f8;">
@@ -249,7 +235,7 @@ export async function sendInvitations(req, res) {
     }
 
     try {
-      await sendInvitationEmail(email)
+      await sendInvitationEmail(email, req)
       invited.push(email)
     } catch (error) {
       failed.push({ email, reason: error.message || 'Failed to send invitation' })
@@ -579,6 +565,10 @@ export function normalizeVerificationCode(code) {
   return String(code ?? '').trim().replace(/\D/g, '')
 }
 
+export function isVerificationCodeMatch(storedCode, inputCode) {
+  return normalizeVerificationCode(storedCode) === normalizeVerificationCode(inputCode)
+}
+
 export async function verifyUser(req, res) {
   const { email, code } = req.body || {}
   const normalizedEmail = email?.trim().toLowerCase()
@@ -602,7 +592,7 @@ export async function verifyUser(req, res) {
       return res.status(404).json({ message: 'No verification pending' })
     }
 
-    if (String(pendingRegistration.verificationCode).trim() !== normalizedCode) {
+    if (!isVerificationCodeMatch(pendingRegistration.verificationCode, normalizedCode)) {
       return res.status(400).json({ message: 'Invalid verification code' })
     }
 
@@ -721,14 +711,13 @@ export async function loginUser(req, res) {
     return res.status(400).json({ message: 'email or username and password are required' })
   }
 
-  let user = null
-  let passwordMatches = false
+  let foundUser = null
   let session = null
 
   try {
-    user = await lookupUserInMongoSafely(identifier)
+    foundUser = await lookupUserInMongoSafely(identifier)
 
-    if (!user) {
+    if (!foundUser) {
       session = driver.session()
 
       try {
@@ -746,22 +735,22 @@ export async function loginUser(req, res) {
         )
 
         if (result.records.length > 0) {
-          user = getUserProperties(result.records[0].get('user'))
+          foundUser = getUserProperties(result.records[0].get('user'))
         }
       } catch (error) {
         console.warn('Neo4j login lookup failed, falling back to MongoDB:', error.message)
       }
     }
 
-    if (!user) {
+    if (!foundUser) {
       return res.status(401).json({ message: 'Invalid credentials' })
     }
 
-    if (user.suspended) {
+    if (foundUser.suspended) {
       return res.status(403).json({ message: 'This account has been suspended. Please contact an administrator.' })
     }
 
-    passwordMatches = await bcrypt.compare(password, user.passwordHash)
+    const passwordMatches = await bcrypt.compare(password, foundUser.passwordHash)
 
     if (!passwordMatches) {
       return res.status(401).json({ message: 'Invalid credentials' })
@@ -769,16 +758,16 @@ export async function loginUser(req, res) {
 
     const token = jwt.sign(
       {
-        id: user.id,
-        role: user.role,
-        username: user.username,
-        email: user.email,
+        id: foundUser.id,
+        role: foundUser.role,
+        username: foundUser.username,
+        email: foundUser.email,
       },
       env.jwtSecret,
       { expiresIn: '7d' }
     )
 
-    const responseUser = await buildLoginResponseUser(user)
+    const responseUser = await buildLoginResponseUser(foundUser)
 
     return res.json({
       message: 'Login successful',

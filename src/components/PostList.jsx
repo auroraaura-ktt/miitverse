@@ -15,7 +15,7 @@ export default function PostList({ posts = [], isLoading = false, onPostUpdated 
       {posts.map((post) => (
         <PostCard
           key={post.id}
-          post={{ ...post, verified: true }}
+          post={post}
           onPostUpdated={onPostUpdated}
         />
       ))}

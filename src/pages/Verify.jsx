@@ -66,12 +66,12 @@ export default function Verify() {
   const initialResendDeadlineMs = getDeadlineMs(initialResendAvailableAt) || (initialEmail ? Date.now() + RESEND_COOLDOWN_MS : 0)
 
   const [email, setEmail] = useState(initialEmail)
+  const [resendDeadlineMs, setResendDeadlineMs] = useState(initialResendDeadlineMs)
+  const [remainingMs, setRemainingMs] = useState(() => Math.max(initialResendDeadlineMs - Date.now(), 0))
   const [codeDigits, setCodeDigits] = useState(Array(8).fill(''))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [info, setInfo] = useState('')
-  const [resendDeadlineMs, setResendDeadlineMs] = useState(initialResendDeadlineMs)
-  const [remainingMs, setRemainingMs] = useState(() => Math.max(initialResendDeadlineMs - Date.now(), 0))
   const [resendLoading, setResendLoading] = useState(false)
   const inputRefs = useRef([])
 
