@@ -20,7 +20,6 @@ export default function AppRoutes() {
       <Route path="/" element={<Home />} />
       <Route path="/about" element={<About />} />
       <Route path="/contact" element={<ContactUs />} />
-      <Route path="/feedback" element={<Feedback />} />
       <Route
         path="/feedback"
         element={(

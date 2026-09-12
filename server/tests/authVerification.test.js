@@ -6,7 +6,7 @@ import {
   isVerificationCodeMatch,
   normalizeVerificationCode,
 } from '../src/controllers/authController.js'
-import { resolveSendgridFromAddress, decideEmailFallbackRoute, getPrimaryEmailSender } from '../src/utils/emailService.js'
+import { decideEmailFallbackRoute, getPrimaryEmailSender } from '../src/utils/emailService.js'
 
 test('normalizeVerificationCode strips spaces and non-digits before validating an 8-digit code', () => {
   assert.equal(normalizeVerificationCode(' 1234 5678 '), '12345678')
@@ -27,12 +27,12 @@ test('buildInvitationLink uses the canonical MiitVerse origin and encodes the em
 
   delete process.env.RENDER_EXTERNAL_URL
   delete process.env.VERCEL_URL
-  process.env.CLIENT_ORIGIN = 'https://miitverse-xi.vercel.app'
+  process.env.CLIENT_ORIGIN = 'https://gdt-vercel.vercel.app'
 
   try {
     assert.equal(
       buildInvitationLink('student@miit.edu.mm'),
-      'https://miitverse-xi.vercel.app/register?email=student%40miit.edu.mm'
+      'https://gdt-vercel.vercel.app/register?email=student%40miit.edu.mm'
     )
   } finally {
     if (originalRenderOrigin === undefined) delete process.env.RENDER_EXTERNAL_URL
@@ -47,23 +47,13 @@ test('buildInvitationLink uses the canonical MiitVerse origin and encodes the em
 })
 
 test('buildInvitationLink prefers the Vercel production host over stale Render defaults', () => {
-  const originalRenderOrigin = process.env.RENDER_EXTERNAL_URL
   const originalVercelUrl = process.env.VERCEL_URL
   const originalClientOrigin = process.env.CLIENT_ORIGIN
-
-  process.env.RENDER_EXTERNAL_URL = 'https://miitverse.onrender.com'
-<<<<<<< HEAD
-  process.env.VERCEL_URL = 'vercel.com'
-  process.env.CLIENT_ORIGIN = 'https://miitverse.onrender.com'
-=======
-  process.env.VERCEL_URL = 'miitverse-xi.vercel.app'
-  process.env.CLIENT_ORIGIN = 'https://miitverse-xi.vercel.app'
->>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
 
   try {
     assert.equal(
       buildInvitationLink('student@miit.edu.mm'),
-      'https://miitverse-xi.vercel.app/register?email=student%40miit.edu.mm'
+      'https://gdt-vercel.vercel.app/register?email=student%40miit.edu.mm'
     )
   } finally {
     if (originalRenderOrigin === undefined) delete process.env.RENDER_EXTERNAL_URL
@@ -75,17 +65,14 @@ test('buildInvitationLink prefers the Vercel production host over stale Render d
     if (originalClientOrigin === undefined) delete process.env.CLIENT_ORIGIN
     else process.env.CLIENT_ORIGIN = originalClientOrigin
   }
-<<<<<<< HEAD
 })
 
 test('buildInvitationLink uses the gdt-vercel app origin from the admin request', () => {
   const originalClientOrigin = process.env.CLIENT_ORIGIN
   const originalVercelUrl = process.env.VERCEL_URL
-  const originalRenderOrigin = process.env.RENDER_EXTERNAL_URL
 
-  process.env.CLIENT_ORIGIN = 'https://miitverse-xi.vercel.app,https://gdt-vercel.vercel.app'
+  process.env.CLIENT_ORIGIN = 'https://miitversebymiit.vercel.app,https://gdt-vercel.vercel.app'
   process.env.VERCEL_URL = 'vercel.com'
-  process.env.RENDER_EXTERNAL_URL = 'https://miitverse.onrender.com'
 
   try {
     assert.equal(
@@ -102,23 +89,14 @@ test('buildInvitationLink uses the gdt-vercel app origin from the admin request'
     if (originalClientOrigin === undefined) delete process.env.CLIENT_ORIGIN
     else process.env.CLIENT_ORIGIN = originalClientOrigin
   }
-=======
->>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
 })
 
-test('resolveSendgridFromAddress avoids personal mailbox senders that hurt delivery', () => {
-  assert.equal(resolveSendgridFromAddress('miitverse_auth@hotmail.com'), 'noreply@sendgrid.net')
-  assert.equal(resolveSendgridFromAddress('noreply@miitverse.com'), 'noreply@miitverse.com')
-  assert.equal(resolveSendgridFromAddress(''), 'noreply@sendgrid.net')
-})
-
-test('decideEmailFallbackRoute prefers SendGrid and falls back to Gmail SMTP when needed', () => {
-  assert.deepEqual(decideEmailFallbackRoute({ sendgridEnabled: true, gmailEnabled: false }), ['sendgrid', 'none'])
-  assert.deepEqual(decideEmailFallbackRoute({ sendgridEnabled: false, gmailEnabled: true }), ['gmail', 'none'])
-  assert.deepEqual(decideEmailFallbackRoute({ sendgridEnabled: true, gmailEnabled: true }), ['sendgrid', 'gmail'])
+test('decideEmailFallbackRoute routes email through Gmail SMTP when configured', () => {
+  assert.deepEqual(decideEmailFallbackRoute({ gmailEnabled: true }), ['gmail', 'none'])
+  assert.deepEqual(decideEmailFallbackRoute({ gmailEnabled: false }), ['none', 'none'])
 })
 
 test('getPrimaryEmailSender resolves the configured sender for the active provider', () => {
-  assert.equal(getPrimaryEmailSender('sendgrid', 'noreply@miitverse.com', 'MiitVerse'), 'noreply@miitverse.com')
   assert.equal(getPrimaryEmailSender('gmail', 'notify@gmail.com', 'MiitVerse'), 'notify@gmail.com')
+  assert.equal(getPrimaryEmailSender('gmail', '', 'MiitVerse'), 'MiitVerse')
 })

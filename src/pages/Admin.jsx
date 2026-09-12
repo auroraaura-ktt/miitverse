@@ -56,10 +56,7 @@ export default function Admin() {
 
   const [feedbackRows, setFeedbackRows] = useState([])
   const [loadingFeedback, setLoadingFeedback] = useState(false)
-<<<<<<< HEAD
   const [feedbackError, setFeedbackError] = useState('')
-=======
->>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
 
   const [inviteEmails, setInviteEmails] = useState('')
   const [inviteMessage, setInviteMessage] = useState({ type: '', text: '' })
@@ -172,23 +169,14 @@ export default function Admin() {
 
   const loadFeedback = useCallback(async () => {
     setLoadingFeedback(true)
-<<<<<<< HEAD
     setFeedbackError('')
-=======
->>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
     try {
       const data = await apiRequest('/feedback', {
         headers: { Authorization: `Bearer ${token}` },
       })
-<<<<<<< HEAD
       setFeedbackRows(Array.isArray(data.feedback) ? data.feedback : [])
     } catch (err) {
       setFeedbackError(err.message || 'Failed to load feedback')
-=======
-      setFeedbackRows(data.feedback || [])
-    } catch (err) {
-      setError(err.message || 'Failed to load feedback')
->>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
       setFeedbackRows([])
     } finally {
       setLoadingFeedback(false)
@@ -235,6 +223,16 @@ export default function Admin() {
     setInviteEmails(e.target.value)
     setInviteMessage({ type: '', text: '' })
     setInviteResults(null)
+  }
+
+  // Copies one of the fixed MiitVerse invitation links to the clipboard.
+  const handleCopyInviteLink = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setInviteMessage({ type: 'success', text: `Copied invitation link: ${url}` })
+    } catch {
+      setInviteMessage({ type: 'error', text: `Could not copy the link. Please copy it manually: ${url}` })
+    }
   }
 
   const handleSendInvitations = async (e) => {
@@ -1188,9 +1186,23 @@ export default function Admin() {
 
             <div className="admin-invite-link">
               <strong>Invitation links:</strong>
-              <a href="https://miitverse-xi.vercel.app/register" target="_blank" rel="noreferrer">https://miitverse-xi.vercel.app</a>
+              <a href="https://gdt-vercel.vercel.app" target="_blank" rel="noreferrer">https://gdt-vercel.vercel.app</a>
+              <button
+                type="button"
+                className="admin-users-refresh"
+                onClick={() => handleCopyInviteLink('https://gdt-vercel.vercel.app')}
+              >
+                Copy link
+              </button>
               <span aria-hidden="true">·</span>
-              <a href="https://gdt-vercel.vercel.app/register" target="_blank" rel="noreferrer">https://gdt-vercel.vercel.app</a>
+              <a href="https://miitversebymiit.vercel.app" target="_blank" rel="noreferrer">https://miitversebymiit.vercel.app</a>
+              <button
+                type="button"
+                className="admin-users-refresh"
+                onClick={() => handleCopyInviteLink('https://miitversebymiit.vercel.app')}
+              >
+                Copy link
+              </button>
             </div>
 
             {inviteMessage.text && (
@@ -1374,14 +1386,9 @@ export default function Admin() {
             </div>
 
             <div className="admin-users-table-wrap admin-report-table-wrap">
-<<<<<<< HEAD
               {feedbackError && <p className="error-text">{feedbackError}</p>}
               {loadingFeedback && <LoadingState label="Loading feedback" compact />}
               {!loadingFeedback && feedbackRows.length === 0 && !feedbackError && <p>No user feedback has been submitted yet.</p>}
-=======
-              {loadingFeedback && <LoadingState label="Loading feedback" compact />}
-              {!loadingFeedback && feedbackRows.length === 0 && <p>No user feedback has been submitted yet.</p>}
->>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
               {!loadingFeedback && feedbackRows.length > 0 && (
               <table className="admin-users-table admin-reports-table">
                 <thead>

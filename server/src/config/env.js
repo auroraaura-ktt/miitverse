@@ -66,13 +66,8 @@ function buildMongoUri() {
 
 export const env = {
   port: Number(process.env.PORT || 3001),
-  clientOrigin: normalizeEnvValue(process.env.CLIENT_ORIGIN || 'https://miitverse-xi.vercel.app'),
+  clientOrigin: normalizeEnvValue(process.env.CLIENT_ORIGIN || 'https://gdt-vercel.vercel.app'),
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
-  // SendGrid API key for email service
-  sendgridApiKey: process.env.SENDGRID_API_KEY || '',
-  sendgridFromEmail: process.env.SENDGRID_FROM_EMAIL || 'noreply@sendgrid.net',
-  sendgridFromName: process.env.SENDGRID_FROM_NAME || 'MiitVerse',
-  emailProviderPriority: (process.env.EMAIL_PROVIDER_PRIORITY || 'sendgrid,gmail').split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean),
   gmailSmtpHost: normalizeEnvValue(process.env.GMAIL_SMTP_HOST || 'smtp.gmail.com'),
   gmailSmtpPort: Number(process.env.GMAIL_SMTP_PORT || 465),
   gmailFromEmail: normalizeEnvValue(process.env.GMAIL_FROM_EMAIL || ''),

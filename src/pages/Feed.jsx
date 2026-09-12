@@ -144,15 +144,22 @@ export default function Feed() {
     )))
   }, [])
 
+  const handlePostDeleted = useCallback((postId) => {
+    setPosts((currentPosts) => currentPosts.filter((post) => String(post.id) !== String(postId)))
+  }, [])
+
   const handleAddPost = async (newPost) => {
     // A browser File / object-URL is only valid for a live preview. It must
     // never be serialized into local state or fed back as a permanent image
     // reference. Only a persisted server URL (post.image) is kept.
     const stripImageFile = (post) => {
       if (!post || typeof post !== "object") return post
-      const { imageFile, ...rest } = post
+      const { imageFile, imageFiles, ...rest } = post
       if (typeof rest.image === "string" && (rest.image.startsWith("blob:") || rest.image.startsWith("object-url:"))) {
         rest.image = null
+      }
+      if (Array.isArray(rest.media)) {
+        rest.media = rest.media.filter((item) => !(typeof item === "string" && item.startsWith("blob:")) && !(item && typeof item.url === "string" && item.url.startsWith("blob:")))
       }
       return rest
     }
@@ -179,13 +186,26 @@ export default function Feed() {
     try {
       let postResponse
 
-      if (newPost.imageFile) {
+      if (newPost.imageFile || (Array.isArray(newPost.imageFiles) && newPost.imageFiles.length > 0)) {
         const formData = new FormData()
         formData.append('content', newPost.content || '')
         formData.append('username', resolvedUsername || newPost.username || 'MiitVerse member')
         if (newPost.profilePicture) formData.append('profilePicture', newPost.profilePicture)
         formData.append('visibility', newPost.visibility || 'public')
-        formData.append('image', newPost.imageFile)
+
+        // Multiple-photo support: every selected file belongs to ONE post. A
+        // single file keeps the legacy 'image' field; several files are sent as
+        // 'images' entries that the server stores on the same post record.
+        const files = Array.isArray(newPost.imageFiles) && newPost.imageFiles.length > 0
+          ? newPost.imageFiles
+          : [newPost.imageFile]
+        if (files.length === 1) {
+          formData.append('image', files[0])
+        } else {
+          for (const file of files) {
+            if (file) formData.append('images', file)
+          }
+        }
 
         postResponse = await apiRequest('/social/posts', {
           method: 'POST',
@@ -354,6 +374,7 @@ export default function Feed() {
           posts={feedPosts}
           isLoading={isLoading}
           onPostUpdated={handlePostUpdated}
+          onPostDeleted={handlePostDeleted}
         />
         {feedError && <div className="feed-load-error" role="alert">{feedError}<button type="button" onClick={() => loadFeedData({ reset: !feedError.includes("more") })}>Retry</button></div>}
         <div ref={loadMoreRef} className="feed-load-status" aria-live="polite">

@@ -60,37 +60,8 @@ function sendVerificationEmailInBackground(email, code, pendingRegistration) {
     })
 }
 
-<<<<<<< HEAD
 export function buildInvitationLink(email, req) {
   const cleanOrigin = getCanonicalClientOrigin(req).replace(/\/+$/g, '')
-=======
-function normalizeClientOrigin(value, fallback = 'https://miitverse-xi.vercel.app') {
-  const rawOrigin = String(value ?? '').trim()
-  const cleanedOrigin = rawOrigin.replace(/\/+$/g, '')
-
-  if (!cleanedOrigin) {
-    return fallback
-  }
-
-  if (/^https?:\/\//i.test(cleanedOrigin)) {
-    return cleanedOrigin
-  }
-
-  return `https://${cleanedOrigin}`
-}
-
-function getCanonicalClientOrigin() {
-  const vercelOrigin = process.env.VERCEL_URL ? normalizeClientOrigin(`https://${process.env.VERCEL_URL}`, '') : ''
-  const renderOrigin = normalizeClientOrigin(process.env.RENDER_EXTERNAL_URL, '')
-  const configuredOrigin = normalizeClientOrigin(env.clientOrigin, '')
-  const fallbackOrigin = 'https://miitverse-xi.vercel.app'
-
-  return [vercelOrigin, renderOrigin, configuredOrigin, fallbackOrigin].find(Boolean) || fallbackOrigin
-}
-
-export function buildInvitationLink(email) {
-  const cleanOrigin = getCanonicalClientOrigin().replace(/\/+$/g, '')
->>>>>>> a897f00351ea1fac8e09bd3a9ec9c49a8eeb6079
   const encodedEmail = encodeURIComponent(String(email ?? '').trim())
   return `${cleanOrigin}/register?email=${encodedEmail}`
 }

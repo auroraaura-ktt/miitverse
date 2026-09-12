@@ -2,10 +2,11 @@ import "./PostCard.css";
 import { useState, useEffect } from "react";
 import ReactionModal from "./ReactionModal";
 import VerifiedBadge from "./VerifiedBadge";
-import { resolveApiUrl } from "../lib/api";
+import PhotoLightbox from "./PhotoLightbox";
+import EditPostModal from "./EditPostModal";
+import { resolveApiUrl, apiRequest, downloadProtectedFile } from "../lib/api";
 import { useAuth } from "../context/useAuth";
 import { useVerifiedAuthors } from "../lib/useVerifiedAuthors";
-import { apiRequest } from "../lib/api";
 
 function formatTimestamp(value) {
   if (!value) return "just now";
@@ -20,7 +21,7 @@ function formatTimestamp(value) {
   return `${Math.floor(minutesAgo / 1440)}d ago`;
 }
 
-export default function PostCard({ post = {}, onPostUpdated }) {
+export default function PostCard({ post = {}, onPostUpdated, onPostDeleted }) {
   const { user } = useAuth();
   const verifiedAuthors = useVerifiedAuthors();
 
@@ -67,8 +68,13 @@ export default function PostCard({ post = {}, onPostUpdated }) {
   const [liking, setLiking] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [reported, setReported] = useState(false);
+  const [showPostMenu, setShowPostMenu] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isEditingPost, setIsEditingPost] = useState(false);
 
   const [showReactionModal, setShowReactionModal] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   useEffect(() => {
     const nextLikers = Array.isArray(likedBy) ? likedBy : [];
@@ -89,17 +95,35 @@ export default function PostCard({ post = {}, onPostUpdated }) {
     setLiking(true);
     try {
       const result = await apiRequest(`/social/posts/${encodeURIComponent(id)}/likes`, { method: "POST" });
+      // The backend may return just reaction info or a full post. We only ever
+      // read the reaction fields we need — never replacing the whole post
+      // object, so the card (photos, files, author, verification, etc.) always
+      // stays intact and the post remains visible in the Feed.
       const nextPost = result.post || {};
       const nextLikers = Array.isArray(nextPost.likedBy) ? nextPost.likedBy : [];
+      const nextLikes = typeof nextPost.likes !== "undefined" ? Number(nextPost.likes || 0)
+        : (Array.isArray(reactions?.likers) ? reactions.likers.length : Number(reactions?.likes || 0));
+      const reacted = typeof result.reacted !== "undefined" ? Boolean(result.reacted) : !reactions.liked;
+
       setReactions((current) => ({
         ...current,
-        likes: Number(nextPost.likes || 0),
-        liked: Boolean(result.reacted),
+        likes: nextLikes,
+        liked: reacted,
         likers: nextLikers,
       }));
-      onPostUpdated?.(nextPost);
+
+      // Propagate ONLY reaction fields up to the Feed. Feed merges these into
+      // the existing post, preserving every other field.
+      if (nextPost.id) {
+        onPostUpdated?.({ id: nextPost.id, likes: nextLikes, likedBy: nextLikers });
+      }
     } catch (error) {
+      // Never remove the post on a reaction failure — leave it visible and
+      // report the problem without touching the Feed list.
       console.error("Failed to save reaction:", error);
+      if (error?.status && error.status !== 404) {
+        console.warn("Reaction could not be saved; the post remains visible.");
+      }
     } finally {
       setLiking(false);
     }
@@ -138,10 +162,140 @@ export default function PostCard({ post = {}, onPostUpdated }) {
     setShowReactionModal(true);
   };
 
+  const canManagePost = Boolean(user?.id) && (
+    String(postUserId) === String(user.id) ||
+    String(post.pageOwnerId) === String(user.id) ||
+    user.role === "admin"
+  );
+
+  const handleEdit = () => {
+    setShowPostMenu(false);
+    setIsEditingPost(true);
+  };
+
+  const handleEditSaved = (updatedPost) => {
+    setIsEditingPost(false);
+    // Propagate the full updated post so the Feed/Profile/PageDashboard card
+    // updates in place without resetting the rest of the Feed.
+    onPostUpdated?.(updatedPost);
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    try {
+      await apiRequest(`/social/posts/${encodeURIComponent(id)}`, { method: "DELETE" });
+      onPostDeleted?.(id);
+    } catch (error) {
+      window.alert(error.message || "We could not delete this post.");
+    }
+  };
+
   // Page posts carry their full page name; fall back to the regular username.
   const authorLabel = pageName || username;
   const displayName = typeof authorLabel === "string" && authorLabel.trim() ? authorLabel.trim() : "User";
-  const imageSrc = image ? resolveApiUrl(image.replace(/^\/api(?=\/)/, "")) : null;
+
+  // Multiple-photo/media support. `media` is the list of server-stored files
+  // that belong to this one post; `image` remains the legacy single-photo field
+  // so old posts keep rendering exactly as before. Non-image attachments
+  // (documents, etc.) render as simple file chips instead of broken images.
+  const mediaEntries = Array.isArray(post.media)
+    ? post.media
+        .map((item) => {
+          const url = typeof item === "string" ? item : item?.url;
+          const type = typeof item === "object" && item ? item.type : null;
+          const name = typeof item === "object" && item ? item.name : null;
+          const size = typeof item === "object" && item ? item.size : null;
+          return typeof url === "string" && url ? { url, type: type || null, name: name || null, size: Number(size) || null } : null;
+        })
+        .filter(Boolean)
+    : [];
+  const isImageMedia = (entry) =>
+    entry.type ? String(entry.type).startsWith("image/") : /\.(png|jpe?g|gif|webp|svg)$/i.test(entry.url);
+  const mediaImages = mediaEntries.filter(isImageMedia);
+  const mediaFiles = mediaEntries.filter((entry) => !isImageMedia(entry));
+  const primaryImage = image || mediaImages[0]?.url || null;
+  const imageSrc = primaryImage ? resolveApiUrl(primaryImage.replace(/^\/api(?=\/)/, "")) : null;
+
+  // All viewable photos on this post (used by the lightbox). These are the
+  // actual image entries, resolved to absolute URLs that `<img>` can render.
+  // A legacy single `image` (not present in media) is included so old photo
+  // posts also open in the viewer.
+  const lightboxPhotos = (() => {
+    const fromMedia = mediaImages.map((entry) => resolveApiUrl(entry.url.replace(/^\/api(?=\/)/, "")));
+    const hasLegacyImage = primaryImage && !mediaImages.some((entry) => {
+      const resolved = resolveApiUrl(entry.url.replace(/^\/api(?=\/)/, ""));
+      return resolved === (primaryImage && resolveApiUrl(primaryImage.replace(/^\/api(?=\/)/, "")));
+    });
+    if (hasLegacyImage && primaryImage) {
+      return [...fromMedia, resolveApiUrl(primaryImage.replace(/^\/api(?=\/)/, ""))];
+    }
+    return fromMedia;
+  })();
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || Number(bytes) <= 0) return "";
+    const raw = Number(bytes);
+    if (raw < 1024) return `${raw} B`;
+    if (raw < 1024 * 1024) return `${Math.round((raw / 1024) * 10) / 10} KB`;
+    return `${Math.round((raw / (1024 * 1024)) * 10) / 10} MB`;
+  };
+
+  // A stable token for a file entry so we can show progress on the right button.
+  const downloadingToken = (url) => {
+    if (typeof url !== "string") return null;
+    return url.split("/").pop() || null;
+  };
+
+  const handleDownload = async (entry) => {
+    if (!user?.id) {
+      window.alert("Sign in to download this file.");
+      return;
+    }
+    if (downloadingId) return;
+
+    const token = downloadingToken(entry.url);
+    if (!token) return;
+
+    setDownloadingId(token);
+    try {
+      const fileName = typeof entry.url === "string" ? entry.url.split("/").pop() : "";
+      const path = `/social/download/${encodeURIComponent(fileName)}`;
+      await downloadProtectedFile(path, { name: entry.name || fileName });
+    } catch (error) {
+      window.alert(error?.message || "We could not download this file.");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const renderFileChip = (entry, index) => {
+    const token = downloadingToken(entry.url);
+    const downloading = downloadingId === token;
+    return (
+      <div key={`${id}-file-${index}`} className="post-file-chip">
+        <span className="post-file-chip-icon" aria-hidden="true">📎</span>
+        <div className="post-file-chip-body">
+          <span className="post-file-chip-name">{entry.name || entry.url.split("/").pop()}</span>
+          {(entry.type || entry.size) && (
+            <span className="post-file-chip-meta">
+              {entry.type ? String(entry.type).toUpperCase() : "FILE"}
+              {entry.size ? ` · ${formatFileSize(entry.size)}` : ""}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="post-file-download-btn"
+          aria-label={`Download ${entry.name || "file"}`}
+          title="Download"
+          disabled={Boolean(downloadingId)}
+          onClick={() => handleDownload(entry)}
+        >
+          {downloading ? <span className="button-spinner" aria-hidden="true" /> : "⬇"}
+        </button>
+      </div>
+    );
+  };
 
   const initials = displayName
     .split(" ")
@@ -161,6 +315,22 @@ export default function PostCard({ post = {}, onPostUpdated }) {
         comments={postComments}
         onCommentAdded={handleCommentAdded}
       />
+
+      <PhotoLightbox
+        photos={lightboxPhotos}
+        currentIndex={lightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+        onNavigate={(nextIndex) => setLightboxIndex(nextIndex)}
+      />
+
+      {canManagePost && (
+        <EditPostModal
+          post={post}
+          isOpen={isEditingPost}
+          onClose={() => setIsEditingPost(false)}
+          onSaved={handleEditSaved}
+        />
+      )}
 
       <div className="post-card">
         <div
@@ -228,7 +398,24 @@ export default function PostCard({ post = {}, onPostUpdated }) {
             </div>
           </div>
 
-          <span style={{ fontSize: "20px", cursor: "pointer" }}>⋯</span>
+          {canManagePost && (
+            <div className="post-card-menu">
+              <button
+                type="button"
+                className="post-card-menu-trigger"
+                aria-label="Post options"
+                onClick={() => setShowPostMenu((visible) => !visible)}
+              >
+                ⋯
+              </button>
+              {showPostMenu && (
+                <div className="post-card-menu-dropdown">
+                  <button type="button" onClick={handleEdit} disabled={isSavingEdit}>Edit</button>
+                  <button type="button" onClick={handleDelete}>Delete</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{ padding: "0 16px 16px" }}>
@@ -244,7 +431,70 @@ export default function PostCard({ post = {}, onPostUpdated }) {
           </p>
         </div>
 
-        {image && (
+        {mediaEntries.length > 1 && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: mediaEntries.length === 2 ? "1fr 1fr" : "1fr 1fr",
+              gap: "2px",
+            }}
+            aria-label="Post photos"
+          >
+            {mediaEntries.map((entry, index) =>
+              isImageMedia(entry) ? (
+                <img
+                  key={`${id}-media-${index}`}
+                  src={resolveApiUrl(entry.url.replace(/^\/api(?=\/)/, ""))}
+                  alt={`post photo ${index + 1}`}
+                  style={{
+                    width: "100%",
+                    height: "180px",
+                    objectFit: "cover",
+                    display: "block",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setLightboxIndex(index)}
+                  onError={(event) => {
+                    if (!event.currentTarget.dataset.fallbackTried) {
+                      event.currentTarget.dataset.fallbackTried = "true";
+                      event.currentTarget.src = entry.url;
+                      return;
+                    }
+                    event.currentTarget.style.display = "none";
+                  }}
+                />
+              ) : (
+                <button
+                  key={`${id}-media-${index}`}
+                  type="button"
+                  className="post-media-file"
+                  disabled={Boolean(downloadingId)}
+                  onClick={() => handleDownload(entry)}
+                >
+                  <span className="post-media-file-icon" aria-hidden="true">📄</span>
+                  <span className="post-media-file-name">{entry.name || entry.url.split("/").pop()}</span>
+                  {(entry.type || entry.size) && (
+                    <span className="post-media-file-meta">
+                      {entry.type ? String(entry.type).toUpperCase() : "FILE"}
+                      {entry.size ? ` · ${formatFileSize(entry.size)}` : ""}
+                    </span>
+                  )}
+                  <span className="post-media-file-btn" role="presentation">
+                    {downloadingId === downloadingToken(entry.url) ? (
+                      <span className="button-spinner" aria-hidden="true" />
+                    ) : (
+                      "⬇ Download"
+                    )}
+                  </span>
+                </button>
+              )
+            )}
+          </div>
+        )}
+
+        {mediaEntries.length <= 1 && mediaFiles.map((entry, index) => renderFileChip(entry, index))}
+
+        {mediaEntries.length <= 1 && primaryImage && (
           <img
             src={imageSrc}
             alt="post"
@@ -253,7 +503,9 @@ export default function PostCard({ post = {}, onPostUpdated }) {
               maxHeight: "550px",
               objectFit: "cover",
               display: "block",
+              cursor: "pointer",
             }}
+            onClick={() => setLightboxIndex(0)}
             onError={(event) => {
               if (!event.currentTarget.dataset.fallbackTried) {
                 event.currentTarget.dataset.fallbackTried = "true";
@@ -376,19 +628,19 @@ export default function PostCard({ post = {}, onPostUpdated }) {
 
         </div>
 
-        <div className="post-engagement" style={{ padding: "12px 16px" }}>
-          <p
-            className="post-card-body"
-            style={{
-              lineHeight: "1.5",
-              fontSize: "14px",
-              marginBottom: "0",
-            }}
-          >
-            <strong>{displayName}</strong> {isVerified && <VerifiedBadge size="small" />} {content.substring(0, 80)}
-            {content.length > 80 ? "..." : ""}
-          </p>
-        </div>
+        {postComments.length > 0 && (
+          <div className="post-comments" aria-label="Comments">
+            {postComments.map((comment, index) => {
+              const commentName = comment?.username || comment?.author || "MiitVerse member";
+              return (
+                <div className="post-comment" key={comment?.id || `${commentName}-${index}`}>
+                  <strong>{commentName}</strong>
+                  <p>{comment?.content || comment?.text || ""}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </>
   );
